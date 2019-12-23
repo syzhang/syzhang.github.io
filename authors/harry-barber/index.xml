@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Harry Barber | S Zhang</title>
+    <link>https://syzhang.github.io/authors/harry-barber/</link>
+      <atom:link href="https://syzhang.github.io/authors/harry-barber/index.xml" rel="self" type="application/rss+xml" />
+    <description>Harry Barber</description>
+    <generator>Source Themes Academic (https://sourcethemes.com/academic/)</generator><language>en-us</language><lastBuildDate>Thu, 01 Jan 2015 00:00:00 +0000</lastBuildDate>
+    <image>
+      <url>https://syzhang.github.io/img/icon-192.png</url>
+      <title>Harry Barber</title>
+      <link>https://syzhang.github.io/authors/harry-barber/</link>
+    </image>
+    
+    <item>
+      <title>Thermal interfaces: reduction in discriminative accuracy despite enhanced subjective confidence after topical application of menthol.</title>
+      <link>https://syzhang.github.io/publication/barber-thermal-2015/</link>
+      <pubDate>Thu, 01 Jan 2015 00:00:00 +0000</pubDate>
+      <guid>https://syzhang.github.io/publication/barber-thermal-2015/</guid>
+      <description></description>
+    </item>
+    
+  </channel>
+</rss>

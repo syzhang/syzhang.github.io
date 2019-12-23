@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Luke R. Harries | S Zhang</title>
+    <link>https://syzhang.github.io/authors/luke-r.-harries/</link>
+      <atom:link href="https://syzhang.github.io/authors/luke-r.-harries/index.xml" rel="self" type="application/rss+xml" />
+    <description>Luke R. Harries</description>
+    <generator>Source Themes Academic (https://sourcethemes.com/academic/)</generator><language>en-us</language><lastBuildDate>Mon, 01 Jan 2018 00:00:00 +0000</lastBuildDate>
+    <image>
+      <url>https://syzhang.github.io/img/icon-192.png</url>
+      <title>Luke R. Harries</title>
+      <link>https://syzhang.github.io/authors/luke-r.-harries/</link>
+    </image>
+    
+    <item>
+      <title>Interlacing Personal and Reference Genomes for Machine Learning Disease-Variant Detection</title>
+      <link>https://syzhang.github.io/publication/harries-interlacing-2018/</link>
+      <pubDate>Mon, 01 Jan 2018 00:00:00 +0000</pubDate>
+      <guid>https://syzhang.github.io/publication/harries-interlacing-2018/</guid>
+      <description></description>
+    </item>
+    
+  </channel>
+</rss>

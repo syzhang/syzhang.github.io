@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Trevor Robbins | S Zhang</title>
+    <link>https://syzhang.github.io/authors/trevor-robbins/</link>
+      <atom:link href="https://syzhang.github.io/authors/trevor-robbins/index.xml" rel="self" type="application/rss+xml" />
+    <description>Trevor Robbins</description>
+    <generator>Source Themes Academic (https://sourcethemes.com/academic/)</generator><language>en-us</language><lastBuildDate>Mon, 11 Jan 2016 00:00:00 +0000</lastBuildDate>
+    <image>
+      <url>https://syzhang.github.io/img/icon-192.png</url>
+      <title>Trevor Robbins</title>
+      <link>https://syzhang.github.io/authors/trevor-robbins/</link>
+    </image>
+    
+    <item>
+      <title>Dissociable Learning Processes Underlie Human Pain Conditioning</title>
+      <link>https://syzhang.github.io/publication/zhang-dissociable-2016/</link>
+      <pubDate>Mon, 11 Jan 2016 00:00:00 +0000</pubDate>
+      <guid>https://syzhang.github.io/publication/zhang-dissociable-2016/</guid>
+      <description></description>
+    </item>
+    
+  </channel>
+</rss>

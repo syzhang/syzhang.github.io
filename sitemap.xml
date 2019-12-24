@@ -19,7 +19,17 @@
   
   <url>
     <loc>https://syzhang.github.io/talk/efic/</loc>
-    <lastmod>2019-09-05T13:00:00+00:00</lastmod>
+    <lastmod>2019-09-05T00:00:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>https://syzhang.github.io/project/eeg/</loc>
+    <lastmod>2019-01-27T00:00:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>https://syzhang.github.io/project/</loc>
+    <lastmod>2019-01-27T00:00:00+00:00</lastmod>
   </url>
   
   <url>
@@ -50,6 +60,16 @@
   <url>
     <loc>https://syzhang.github.io/authors/suyi-zhang/</loc>
     <lastmod>2019-01-01T00:00:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>https://syzhang.github.io/project/fmris/</loc>
+    <lastmod>2018-11-27T00:00:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>https://syzhang.github.io/project/ml/</loc>
+    <lastmod>2018-08-27T00:00:00+00:00</lastmod>
   </url>
   
   <url>
@@ -236,15 +256,7 @@
   </url>
   
   <url>
-    <loc>https://syzhang.github.io/project/internal-project/</loc>
-  </url>
-  
-  <url>
     <loc>https://syzhang.github.io/post/</loc>
-  </url>
-  
-  <url>
-    <loc>https://syzhang.github.io/project/</loc>
   </url>
   
   <url>

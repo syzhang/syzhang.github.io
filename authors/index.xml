@@ -5,7 +5,7 @@
     <link>https://syzhang.github.io/authors/</link>
       <atom:link href="https://syzhang.github.io/authors/index.xml" rel="self" type="application/rss+xml" />
     <description>Authors</description>
-    <generator>Source Themes Academic (https://sourcethemes.com/academic/)</generator><language>en-us</language><lastBuildDate>Tue, 01 Jan 2019 00:00:00 +0000</lastBuildDate>
+    <generator>Source Themes Academic (https://sourcethemes.com/academic/)</generator><language>en-us</language><copyright>Suyi Zhang © 2019</copyright><lastBuildDate>Tue, 01 Jan 2019 00:00:00 +0000</lastBuildDate>
     <image>
       <url>https://syzhang.github.io/img/icon-192.png</url>
       <title>Authors</title>
@@ -226,7 +226,7 @@
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       <guid>https://syzhang.github.io/authors/admin/</guid>
       <description>&lt;!-- Nelson Bighetti is a professor of artificial intelligence at the Stanford AI Lab. His research interests include distributed robotics, mobile computing and programmable matter. He leads the Robotic Neurobiology group, which develops self-reconfiguring robots, systems of self-organizing robots, and mobile sensor networks. --&gt;
-&lt;p&gt;I am a post-doctoral Research Associate at the &lt;a href=&#34;http://learning.eng.cam.ac.uk/Public/&#34;&gt;Computational and Biological Learning Lab (CBL)&lt;/a&gt;, Department of Engineering at University of Cambridge. My current research focuses on understanding how humans learn and adapt to pain and relief, by modelling brain imaging and physiological data with learning algorithms, supervised by &lt;a href=&#34;http://www.seymourlab.com/&#34;&gt;Dr Ben Seymour&lt;/a&gt;. I am also interested in developing brain-computer interface and neurofeedback systems for chronic pain treatment.&lt;/p&gt;
+&lt;p&gt;I am a post-doctoral Research Associate at the &lt;a href=&#34;http://learning.eng.cam.ac.uk/Public/&#34;&gt;Computational and Biological Learning Lab (CBL)&lt;/a&gt;, Department of Engineering at University of Cambridge. My current research focuses on understanding how humans learn and adapt to pain and relief by modelling brain imaging (fMRI/EEG) and physiological data with learning algorithms, supervised by &lt;a href=&#34;http://www.seymourlab.com/&#34;&gt;Dr Ben Seymour&lt;/a&gt;. I am also interested in developing brain-computer interface and decoded neurofeedback systems for chronic pain treatment.&lt;/p&gt;
 </description>
     </item>
     

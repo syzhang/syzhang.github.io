@@ -1,13 +1,14 @@
 import fs from 'fs';
 import path from 'path';
 import matter from 'gray-matter';
-import { MDXRemote } from 'next-mdx-remote/rsc';
+import { compile, run } from '@mdx-js/mdx';
+import * as runtime from 'react/jsx-runtime';
 import rehypeHighlight from 'rehype-highlight';
 import rehypeSlug from 'rehype-slug';
 import remarkGfm from 'remark-gfm';
 
 interface Props {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }
 
 async function getPost(slug: string) {
@@ -16,7 +17,14 @@ async function getPost(slug: string) {
   const fileContents = fs.readFileSync(fullPath, 'utf8');
   const { data, content } = matter(fileContents);
 
-  return { metadata: data, content };
+  // Compile MDX
+  const code = String(await compile(content, {
+    outputFormat: 'function-body',
+    remarkPlugins: [remarkGfm],
+    rehypePlugins: [rehypeHighlight, rehypeSlug],
+  }));
+
+  return { metadata: data, code };
 }
 
 export async function generateStaticParams() {
@@ -36,7 +44,11 @@ export async function generateStaticParams() {
 }
 
 export default async function Post({ params }: Props) {
-  const { metadata, content } = await getPost(params.slug);
+  const { slug } = await params;
+  const { metadata, code } = await getPost(slug);
+
+  // Run the compiled MDX
+  const { default: Content } = await run(code, runtime as any);
 
   return (
     <article className="max-w-4xl mx-auto px-4 py-12">
@@ -57,15 +69,7 @@ export default async function Post({ params }: Props) {
       </header>
 
       <div className="prose max-w-none">
-        <MDXRemote
-          source={content}
-          options={{
-            mdxOptions: {
-              remarkPlugins: [remarkGfm],
-              rehypePlugins: [rehypeHighlight, rehypeSlug],
-            },
-          }}
-        />
+        <Content />
       </div>
 
       <div className="mt-12 pt-8 border-t">

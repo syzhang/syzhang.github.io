@@ -47,25 +47,23 @@ export default function RootLayout({
                 >
                   Blog
                 </Link>
-                                <Link
-                  href="/publications"
+                <Link
+                  href="/about"
                   className="hidden font-medium text-gray-900 dark:text-gray-100 sm:block hover:text-primary-500 dark:hover:text-primary-400"
                 >
-                  Publications
+                  About
+                </Link>
+                <Link
+                  href="/projects"
+                  className="hidden font-medium text-gray-900 dark:text-gray-100 sm:block hover:text-primary-500 dark:hover:text-primary-400"
+                >
+                  Projects
                 </Link>
                 <Link
                   href="/publications"
                   className="hidden font-medium text-gray-900 dark:text-gray-100 sm:block hover:text-primary-500 dark:hover:text-primary-400"
                 >
                   Publications
-                </Link>
-                <Link
-                  href="https://github.com/syzhang"
-                  className="font-medium text-gray-900 dark:text-gray-100 hover:text-primary-500 dark:hover:text-primary-400"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  GitHub
                 </Link>
               </nav>
             </header>

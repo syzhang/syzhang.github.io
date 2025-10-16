@@ -1,6 +1,13 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import Link from "next/link";
+import { Space_Grotesk } from 'next/font/google';
+
+const spaceGrotesk = Space_Grotesk({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-space-grotesk',
+});
 
 export const metadata: Metadata = {
   title: "Suyi Zhang - AI/ML Engineer",
@@ -19,8 +26,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="scroll-smooth">
-      <body className="bg-white text-gray-900 dark:bg-gray-950 dark:text-gray-100 antialiased">
+    <html lang="en" className={`${spaceGrotesk.variable} scroll-smooth`}>
+      <body className="bg-white text-gray-900 dark:bg-gray-950 dark:text-gray-100 antialiased font-sans">
         <div className="mx-auto max-w-3xl px-4 sm:px-6 xl:max-w-5xl xl:px-0">
           <div className="flex h-screen flex-col justify-between">
             <header className="flex items-center justify-between py-10">
@@ -39,6 +46,12 @@ export default function RootLayout({
                   className="hidden font-medium text-gray-900 dark:text-gray-100 sm:block hover:text-primary-500 dark:hover:text-primary-400"
                 >
                   Blog
+                </Link>
+                                <Link
+                  href="/publications"
+                  className="hidden font-medium text-gray-900 dark:text-gray-100 sm:block hover:text-primary-500 dark:hover:text-primary-400"
+                >
+                  Publications
                 </Link>
                 <Link
                   href="/publications"

@@ -1,0 +1,175 @@
+---
+title: "Building Production LLM Agent Systems: Architecture & Lessons Learned"
+date: "2025-01-20"
+description: "Lessons from building and deploying agentic AI workflows that serve 300+ users in production, covering architecture decisions, tool selection, and real-world challenges."
+tags: ["LLM", "AI Agents", "Production ML", "AWS"]
+---
+
+Over the past year building our AI supply chain startup, I've deployed agentic workflows serving 300+ users in production. Here's what I learned about building reliable LLM agent systems.
+
+## The Problem
+
+Traditional automation struggles with complex, multi-step decision-making in supply chain operations. We needed a system that could:
+
+- Parse multimodal documents (PDFs with tables, images, text)
+- Make context-aware decisions across multiple data sources
+- Maintain reliability at scale
+- Optimize for both latency and cost
+
+## Architecture Overview
+
+Our production system consists of several key components:
+
+```
+┌─────────────────────────────────────────────────┐
+│  User Interface (FastAPI)                       │
+└────────────────┬────────────────────────────────┘
+                 │
+┌────────────────▼────────────────────────────────┐
+│  Agent Orchestration Layer                      │
+│  (Google ADK / PydanticAI)                     │
+└────────┬────────────────────┬───────────────────┘
+         │                    │
+    ┌────▼─────┐         ┌────▼─────────────┐
+    │   LLM    │         │  Vector Search   │
+    │ (Claude) │         │   (Pinecone)     │
+    └──────────┘         └──────────────────┘
+```
+
+### Why Google ADK and PydanticAI?
+
+After evaluating LangChain, LlamaIndex, and custom solutions, I chose **Google ADK** and **PydanticAI** for:
+
+**Type Safety**: Pydantic models ensure data validation at every step
+- Catch errors early in development
+- Self-documenting agent interfaces
+- Easy to refactor as requirements change
+
+**Observability**: Built-in logging and tracing
+- Critical for debugging production issues
+- Track agent decision paths
+- Monitor costs per workflow
+
+**Flexibility**: Composable agent patterns
+- Mix and match tools easily
+- Test components independently
+- Gradual rollout of new capabilities
+
+## Key Technical Decisions
+
+### 1. Multimodal RAG Pipeline
+
+For PDF processing, we implemented a multi-stage pipeline:
+
+```python
+# Example architecture (simplified)
+class DocumentProcessor:
+    def process(self, pdf_bytes: bytes) -> ProcessedDocument:
+        # Extract text, tables, and images
+        text = self.text_extractor.extract(pdf_bytes)
+        tables = self.table_parser.parse(pdf_bytes)
+        images = self.image_analyzer.analyze(pdf_bytes)
+
+        # Generate embeddings
+        embeddings = self.embed_chunks(text, tables)
+
+        # Store in vector DB
+        self.vector_store.upsert(embeddings)
+
+        return ProcessedDocument(...)
+```
+
+**Result**: 80% reduction in manual operations
+
+**Key insight**: Don't embed images directly - use vision models to generate text descriptions, then embed those. Much better retrieval performance.
+
+### 2. Cost vs. Latency Optimization
+
+We use a tiered approach:
+
+- **Fast path** (80% of queries): Smaller, faster model (Claude Haiku)
+- **Complex path** (20% of queries): Larger model (Claude Opus) with multi-step reasoning
+- **Routing logic**: Lightweight classifier determines which path
+
+This reduced our average cost per query by 60% while maintaining quality.
+
+### 3. Error Handling Strategies
+
+LLM systems fail in unique ways. Our approach:
+
+```python
+@retry(max_attempts=3, backoff=exponential)
+async def agent_workflow(input: Request):
+    try:
+        result = await agent.run(input)
+
+        # Validate output structure
+        if not validate_response(result):
+            # Fallback to simpler workflow
+            return await fallback_agent.run(input)
+
+        return result
+    except RateLimitError:
+        # Graceful degradation
+        return cached_response_or_queue(input)
+```
+
+## Results & Metrics
+
+After 6 months in production:
+
+- **300+ registered users**
+- **80% reduction** in manual document processing time
+- **99.2% uptime** (targeting 99.5%)
+- **Average latency**: 2.3s for simple queries, 8.5s for complex workflows
+- **Cost per query**: $0.04 average (down from $0.10 initially)
+
+## What I'd Do Differently
+
+### 1. Start with Evals Earlier
+
+We waited too long to build comprehensive evaluation sets. Should have:
+- Created golden test sets from day 1
+- Automated regression testing
+- A/B tested agent changes
+
+### 2. Invest in Observability from Day 1
+
+Added logging/tracing as an afterthought. Now it's our most valuable debugging tool.
+
+### 3. Prompt Versioning
+
+We initially hard-coded prompts. Big mistake. Now we:
+- Version prompts in separate files
+- Track which version is in production
+- A/B test prompt changes
+
+## Tech Stack Summary
+
+| Component | Technology | Why |
+|-----------|-----------|-----|
+| Orchestration | Google ADK, PydanticAI | Type safety, observability |
+| LLM | Claude (Anthropic) | Instruction following, context window |
+| Vector DB | Pinecone | Managed service, good performance |
+| API Framework | FastAPI | Async support, automatic docs |
+| Infrastructure | AWS (Lambda, ECS, CDK) | Familiar, good tooling |
+| Monitoring | CloudWatch + custom metrics | Integrated with AWS |
+
+## Lessons for Building Your Own System
+
+1. **Start simple**: Don't over-engineer. Get a working end-to-end system first.
+2. **Measure everything**: You can't optimize what you don't measure.
+3. **Plan for failure**: LLMs will fail in unexpected ways. Design for graceful degradation.
+4. **Invest in tooling**: Good evals, logging, and monitoring pay dividends.
+5. **Iterate on prompts**: This is where most of your "tuning" happens in production.
+
+## What's Next
+
+We're currently exploring:
+- Fine-tuning smaller models for specific tasks (reduce cost & latency)
+- Multi-agent collaboration patterns (specialist agents)
+- Streaming responses for better UX
+
+---
+
+*Want to discuss LLM agent architectures? Reach out on [LinkedIn](https://www.linkedin.com/in/suyi-zhang/) or [email](mailto:suyizhang52@gmail.com).*

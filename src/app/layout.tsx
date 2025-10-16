@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "Suyi Zhang - AI/ML Engineer",
@@ -18,27 +19,88 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className="bg-gray-50 text-gray-900">
-        <nav className="bg-white shadow-sm border-b">
-          <div className="max-w-4xl mx-auto px-4 py-4">
-            <div className="flex justify-between items-center">
-              <a href="/" className="text-xl font-bold">Suyi Zhang</a>
-              <div className="flex gap-6">
-                <a href="/" className="hover:text-blue-600">About</a>
-                <a href="/blog" className="hover:text-blue-600">Blog</a>
-                <a href="/publications" className="hover:text-blue-600">Publications</a>
-                <a href="https://github.com/syzhang" target="_blank" rel="noopener noreferrer" className="hover:text-blue-600">GitHub</a>
+    <html lang="en" className="scroll-smooth">
+      <body className="bg-white text-gray-900 dark:bg-gray-950 dark:text-gray-100 antialiased">
+        <div className="mx-auto max-w-3xl px-4 sm:px-6 xl:max-w-5xl xl:px-0">
+          <div className="flex h-screen flex-col justify-between">
+            <header className="flex items-center justify-between py-10">
+              <div>
+                <Link href="/" aria-label="Suyi Zhang">
+                  <div className="flex items-center justify-between">
+                    <div className="text-2xl font-semibold sm:block">
+                      Suyi Zhang
+                    </div>
+                  </div>
+                </Link>
               </div>
-            </div>
+              <nav className="flex items-center space-x-4 leading-5 sm:space-x-6">
+                <Link
+                  href="/blog"
+                  className="hidden font-medium text-gray-900 dark:text-gray-100 sm:block hover:text-primary-500 dark:hover:text-primary-400"
+                >
+                  Blog
+                </Link>
+                <Link
+                  href="/publications"
+                  className="hidden font-medium text-gray-900 dark:text-gray-100 sm:block hover:text-primary-500 dark:hover:text-primary-400"
+                >
+                  Publications
+                </Link>
+                <Link
+                  href="https://github.com/syzhang"
+                  className="font-medium text-gray-900 dark:text-gray-100 hover:text-primary-500 dark:hover:text-primary-400"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  GitHub
+                </Link>
+              </nav>
+            </header>
+            <main className="mb-auto">{children}</main>
+            <footer>
+              <div className="mt-16 flex flex-col items-center">
+                <div className="mb-3 flex space-x-4">
+                  <a
+                    href="mailto:suyizhang52@gmail.com"
+                    className="text-sm text-gray-500 transition hover:text-gray-600 dark:hover:text-gray-400"
+                  >
+                    Email
+                  </a>
+                  <div className="text-gray-500">•</div>
+                  <a
+                    href="https://github.com/syzhang"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-gray-500 transition hover:text-gray-600 dark:hover:text-gray-400"
+                  >
+                    GitHub
+                  </a>
+                  <div className="text-gray-500">•</div>
+                  <a
+                    href="https://www.linkedin.com/in/suyi-zhang/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-gray-500 transition hover:text-gray-600 dark:hover:text-gray-400"
+                  >
+                    LinkedIn
+                  </a>
+                  <div className="text-gray-500">•</div>
+                  <a
+                    href="https://scholar.google.com/citations?user=2VXl1ckAAAAJ&hl"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-gray-500 transition hover:text-gray-600 dark:hover:text-gray-400"
+                  >
+                    Scholar
+                  </a>
+                </div>
+                <div className="mb-8 text-sm text-gray-500">
+                  © {new Date().getFullYear()} Suyi Zhang
+                </div>
+              </div>
+            </footer>
           </div>
-        </nav>
-        <main>{children}</main>
-        <footer className="mt-16 py-8 border-t bg-white">
-          <div className="max-w-4xl mx-auto px-4 text-center text-gray-600">
-            <p>© {new Date().getFullYear()} Suyi Zhang</p>
-          </div>
-        </footer>
+        </div>
       </body>
     </html>
   );

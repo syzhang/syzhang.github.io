@@ -2,54 +2,87 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Syntax highlighting styles */
-@import 'highlight.js/styles/github.css';
+/* Syntax highlighting - light theme */
+@import 'highlight.js/styles/github.css' (prefers-color-scheme: light);
+/* Syntax highlighting - dark theme */
+@import 'highlight.js/styles/github-dark.css' (prefers-color-scheme: dark);
 
-/* Custom prose styles for blog posts */
 .prose {
-  @apply max-w-none;
-}
-
-.prose pre {
-  @apply bg-gray-900 text-gray-100 rounded-lg p-4 overflow-x-auto;
-}
-
-.prose code {
-  @apply bg-gray-100 px-1 py-0.5 rounded text-sm;
-}
-
-.prose pre code {
-  @apply bg-transparent p-0;
-}
-
-.prose h1 {
-  @apply text-3xl font-bold mt-8 mb-4;
-}
-
-.prose h2 {
-  @apply text-2xl font-bold mt-6 mb-3;
-}
-
-.prose h3 {
-  @apply text-xl font-semibold mt-4 mb-2;
-}
-
-.prose a {
-  @apply text-blue-600 hover:text-blue-800 underline;
-}
-
-.prose ul {
-  @apply list-disc list-inside my-4;
-}
-
-.prose ol {
-  @apply list-decimal list-inside my-4;
+  @apply text-gray-700 dark:text-gray-300;
 }
 
 .prose p {
-  @apply my-4 leading-relaxed;
+  @apply my-4 leading-7;
+}
+
+.prose strong {
+  @apply font-semibold text-gray-900 dark:text-gray-100;
+}
+
+.prose a {
+  @apply text-primary-500 hover:text-primary-600 dark:text-primary-400 dark:hover:text-primary-300 no-underline;
+}
+
+.prose h1 {
+  @apply text-3xl font-bold mt-8 mb-4 text-gray-900 dark:text-gray-100;
+}
+
+.prose h2 {
+  @apply text-2xl font-bold mt-6 mb-3 text-gray-900 dark:text-gray-100;
+}
+
+.prose h3 {
+  @apply text-xl font-semibold mt-4 mb-2 text-gray-900 dark:text-gray-100;
+}
+
+.prose h4 {
+  @apply text-lg font-semibold mt-3 mb-2 text-gray-900 dark:text-gray-100;
+}
+
+.prose ul {
+  @apply list-disc list-outside my-4 pl-6;
+}
+
+.prose ol {
+  @apply list-decimal list-outside my-4 pl-6;
+}
+
+.prose li {
+  @apply my-1;
 }
 
 .prose blockquote {
-  @apply border-l-4 border-gray-300 pl-4 italic my-4;
+  @apply border-l-4 border-gray-300 dark:border-gray-700 pl-4 italic my-4 text-gray-700 dark:text-gray-400;
+}
+
+.prose code {
+  @apply bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded text-sm font-mono text-primary-600 dark:text-primary-400;
+}
+
+.prose pre {
+  @apply bg-gray-900 text-gray-100 rounded-lg p-4 overflow-x-auto my-6;
+}
+
+.prose pre code {
+  @apply bg-transparent p-0 text-gray-100;
+}
+
+.prose table {
+  @apply w-full my-6 border-collapse;
+}
+
+.prose th {
+  @apply border border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 px-4 py-2 text-left font-semibold;
+}
+
+.prose td {
+  @apply border border-gray-300 dark:border-gray-700 px-4 py-2;
+}
+
+.prose hr {
+  @apply my-8 border-gray-200 dark:border-gray-700;
+}
+
+.prose img {
+  @apply rounded-lg my-6;
 }

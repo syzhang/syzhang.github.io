@@ -6,6 +6,7 @@ import * as runtime from 'react/jsx-runtime';
 import rehypeHighlight from 'rehype-highlight';
 import rehypeSlug from 'rehype-slug';
 import remarkGfm from 'remark-gfm';
+import Link from 'next/link';
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -30,7 +31,6 @@ async function getPost(slug: string) {
 export async function generateStaticParams() {
   const postsDirectory = path.join(process.cwd(), 'content', 'blog');
 
-  // Return empty array if directory doesn't exist yet
   if (!fs.existsSync(postsDirectory)) {
     return [];
   }
@@ -51,15 +51,27 @@ export default async function Post({ params }: Props) {
   const { default: Content } = await run(code, runtime as any);
 
   return (
-    <article className="max-w-4xl mx-auto px-4 py-12">
-      <header className="mb-8">
-        <h1 className="text-4xl font-bold mb-4">{metadata.title}</h1>
-        <div className="flex gap-4 text-gray-600">
-          <time dateTime={metadata.date}>{metadata.date}</time>
+    <div className="divide-y divide-gray-200 dark:divide-gray-700">
+      <header className="space-y-2 pb-8 pt-6 md:space-y-5">
+        <dl className="space-y-10">
+          <div>
+            <dt className="sr-only">Published on</dt>
+            <dd className="text-base font-medium leading-6 text-gray-500 dark:text-gray-400">
+              <time dateTime={metadata.date}>{metadata.date}</time>
+            </dd>
+          </div>
+        </dl>
+        <div>
+          <h1 className="text-3xl font-extrabold leading-9 tracking-tight text-gray-900 dark:text-gray-100 sm:text-4xl sm:leading-10 md:text-5xl md:leading-14">
+            {metadata.title}
+          </h1>
           {metadata.tags && (
-            <div className="flex gap-2">
+            <div className="flex flex-wrap mt-3">
               {metadata.tags.map((tag: string) => (
-                <span key={tag} className="px-2 py-1 bg-gray-100 rounded text-sm">
+                <span
+                  key={tag}
+                  className="mr-3 text-sm font-medium uppercase text-primary-500 dark:text-primary-400"
+                >
                   {tag}
                 </span>
               ))}
@@ -67,16 +79,26 @@ export default async function Post({ params }: Props) {
           )}
         </div>
       </header>
-
-      <div className="prose max-w-none">
-        <Content />
+      <div className="divide-y divide-gray-200 pb-8 dark:divide-gray-700 xl:divide-y-0">
+        <div className="divide-y divide-gray-200 dark:divide-gray-700 xl:col-span-3 xl:row-span-2 xl:pb-0">
+          <div className="prose max-w-none pb-8 pt-10 dark:prose-dark">
+            <Content />
+          </div>
+        </div>
+        <footer>
+          <div className="flex flex-col text-sm font-medium sm:flex-row sm:justify-between sm:text-base pt-8">
+            <div className="pt-4 xl:pt-8">
+              <Link
+                href="/blog"
+                className="text-primary-500 hover:text-primary-600 dark:hover:text-primary-400"
+                aria-label="Back to blog"
+              >
+                &larr; Back to blog
+              </Link>
+            </div>
+          </div>
+        </footer>
       </div>
-
-      <div className="mt-12 pt-8 border-t">
-        <a href="/blog" className="text-blue-600 hover:underline">
-          ← Back to all posts
-        </a>
-      </div>
-    </article>
+    </div>
   );
 }

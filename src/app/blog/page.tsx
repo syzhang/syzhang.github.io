@@ -7,13 +7,13 @@ interface PostMetadata {
   title: string;
   date: string;
   description: string;
+  tags?: string[];
   slug: string;
 }
 
 function getPostsMetadata(): PostMetadata[] {
   const postsDirectory = path.join(process.cwd(), 'content', 'blog');
 
-  // Return empty array if directory doesn't exist yet
   if (!fs.existsSync(postsDirectory)) {
     return [];
   }
@@ -32,6 +32,7 @@ function getPostsMetadata(): PostMetadata[] {
         title: data.title,
         date: data.date,
         description: data.description,
+        tags: data.tags,
       };
     });
 
@@ -42,39 +43,78 @@ export default function BlogPage() {
   const posts = getPostsMetadata();
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-12">
-      <h1 className="text-4xl font-bold mb-8">Blog</h1>
+    <div className="divide-y divide-gray-200 dark:divide-gray-700">
+      <div className="space-y-2 pb-8 pt-6 md:space-y-5">
+        <h1 className="text-3xl font-extrabold leading-9 tracking-tight text-gray-900 dark:text-gray-100 sm:text-4xl sm:leading-10 md:text-6xl md:leading-14">
+          Blog
+        </h1>
+        <p className="text-lg leading-7 text-gray-500 dark:text-gray-400">
+          Technical posts on LLMs, AI agents, and production ML systems
+        </p>
+      </div>
 
       {posts.length === 0 ? (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-          <p className="text-gray-700">
-            Blog posts coming soon! I'll be writing about:
+        <div className="pt-8">
+          <p className="text-gray-500 dark:text-gray-400">
+            Blog posts coming soon! I'll be writing about building production LLM systems,
+            AI agent architectures, and lessons learned from deploying ML in the real world.
           </p>
-          <ul className="list-disc list-inside mt-4 space-y-2 text-gray-700">
-            <li>Building production LLM agent systems</li>
-            <li>Scaling AI services on AWS</li>
-            <li>Multimodal RAG in practice</li>
-            <li>Real-time ML on neuroimaging data</li>
-            <li>Transitioning from academia to AI industry</li>
-          </ul>
         </div>
       ) : (
-        <div className="space-y-8">
+        <ul className="divide-y divide-gray-200 dark:divide-gray-700">
           {posts.map((post) => (
-            <article key={post.slug} className="bg-white p-6 rounded-lg shadow-sm border hover:shadow-md transition-shadow">
-              <Link href={`/blog/${post.slug}`}>
-                <h2 className="text-2xl font-semibold mb-2 text-blue-600 hover:text-blue-800">
-                  {post.title}
-                </h2>
-              </Link>
-              <p className="text-gray-600 text-sm mb-3">{post.date}</p>
-              <p className="text-gray-700">{post.description}</p>
-              <Link href={`/blog/${post.slug}`} className="text-blue-600 hover:underline mt-2 inline-block">
-                Read more →
-              </Link>
-            </article>
+            <li key={post.slug} className="py-12">
+              <article>
+                <div className="space-y-2 xl:grid xl:grid-cols-4 xl:items-baseline xl:space-y-0">
+                  <dl>
+                    <dt className="sr-only">Published on</dt>
+                    <dd className="text-base font-medium leading-6 text-gray-500 dark:text-gray-400">
+                      <time dateTime={post.date}>{post.date}</time>
+                    </dd>
+                  </dl>
+                  <div className="space-y-5 xl:col-span-3">
+                    <div className="space-y-6">
+                      <div>
+                        <h2 className="text-2xl font-bold leading-8 tracking-tight">
+                          <Link
+                            href={`/blog/${post.slug}`}
+                            className="text-gray-900 dark:text-gray-100"
+                          >
+                            {post.title}
+                          </Link>
+                        </h2>
+                        {post.tags && (
+                          <div className="flex flex-wrap mt-3">
+                            {post.tags.map((tag) => (
+                              <span
+                                key={tag}
+                                className="mr-3 text-sm font-medium uppercase text-primary-500 dark:text-primary-400"
+                              >
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div className="prose max-w-none text-gray-500 dark:text-gray-400">
+                        {post.description}
+                      </div>
+                    </div>
+                    <div className="text-base font-medium leading-6">
+                      <Link
+                        href={`/blog/${post.slug}`}
+                        className="text-primary-500 hover:text-primary-600 dark:hover:text-primary-400"
+                        aria-label={`Read more: ${post.title}`}
+                      >
+                        Read more &rarr;
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              </article>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
     </div>
   );

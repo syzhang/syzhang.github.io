@@ -48,12 +48,6 @@ export default function RootLayout({
                   Blog
                 </Link>
                 <Link
-                  href="/about"
-                  className="hidden font-medium text-gray-900 dark:text-gray-100 sm:block hover:text-primary-500 dark:hover:text-primary-400"
-                >
-                  About
-                </Link>
-                <Link
                   href="/projects"
                   className="hidden font-medium text-gray-900 dark:text-gray-100 sm:block hover:text-primary-500 dark:hover:text-primary-400"
                 >

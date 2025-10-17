@@ -36,8 +36,7 @@ export default function PublicationsPage() {
         { text: "Paper", url: "https://doi.org/10.1016/j.cub.2020.07.066" },
         { text: "Code", url: "https://github.com/syzhang/coadapt_repo" },
         { text: "Data", url: "https://openneuro.org/datasets/ds002036" }
-      ],
-      featured: true
+      ]
     },
     {
       title: "Encoding and Decoding of Pain Relief in the Human Brain",
@@ -112,11 +111,7 @@ export default function PublicationsPage() {
         {publications.map((pub, index) => (
           <article
             key={index}
-            className={`p-6 rounded-lg border ${
-              pub.featured
-                ? 'bg-blue-50 border-blue-200'
-                : 'bg-white border-gray-200'
-            }`}
+            className="p-6 rounded-lg border bg-white border-gray-200"
           >
             <h3 className="text-lg font-semibold mb-2">
               {pub.title}
@@ -142,17 +137,6 @@ export default function PublicationsPage() {
             )}
           </article>
         ))}
-      </div>
-
-      <div className="mt-12 p-6 bg-gray-50 rounded-lg border">
-        <h2 className="text-xl font-semibold mb-3">Selected Grants & Awards</h2>
-        <ul className="space-y-2 text-gray-700">
-          <li>• <strong>UKRI/EPSRC</strong> - Chronic Pain Neurotechnology Network+ (Named Researcher, £1M) - 2022-2026</li>
-          <li>• <strong>MRC</strong> - Advanced Pain Discovery Platform (Named Researcher, £1.5M) - 2022-2025</li>
-          <li>• <strong>DS4A</strong> - Data Science Fellowship (top 3%) - 2021</li>
-          <li>• <strong>Wellcome Trust</strong> - Developing Concept Fund (Co-I, £30k) - 2019</li>
-          <li>• <strong>University of Cambridge</strong> - W. D. Armstrong Studentship (2 per year) - 2014-2018</li>
-        </ul>
       </div>
     </div>
   );

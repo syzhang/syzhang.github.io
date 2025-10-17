@@ -4,9 +4,6 @@ export default function Home() {
   return (
     <div className="divide-y divide-gray-200 dark:divide-gray-700">
       <div className="space-y-2 pb-8 pt-6 md:space-y-5">
-        <h1 className="text-3xl font-extrabold leading-9 tracking-tight text-gray-900 dark:text-gray-100 sm:text-4xl sm:leading-10 md:text-6xl md:leading-14">
-          Hi, I'm Suyi
-        </h1>
         <p className="text-lg leading-7 text-gray-500 dark:text-gray-400">
           AI/ML Engineer · LLMs & Agentic Workflows · Startup Co-founder/CTO
         </p>
@@ -14,19 +11,8 @@ export default function Home() {
 
       <div className="prose max-w-none pb-8 pt-8 dark:prose-dark xl:col-span-2">
         <p>
-          I'm an AI/ML Engineer with a PhD in Engineering and 10+ years developing machine learning systems.
-          Currently, I'm co-founder and CTO of an AI supply chain startup where I build production-ready
-          agentic AI workflows using LLMs and vector search.
-        </p>
-        <p>
-          My expertise spans <strong>LLMs, AI agents, reinforcement learning, and statistical modeling</strong>, with a proven
-          track record deploying scalable AI solutions in cloud environments (AWS). I've worked on everything
-          from real-time brain-computer interfaces to automated decision-making systems serving 300+ users.
-        </p>
-        <p>
-          Previously, I was a researcher at University of Oxford and University of Cambridge, where I developed
-          ML models for neuroimaging data and brain-machine interfaces. I transitioned from academia to industry
-          to focus on building AI systems that create real-world impact.
+        AI/ML Engineer building production AI agents as cofounder/CTO of an AI supply chain startup.
+        Previously Oxford & Cambridge researcher working on neuroimaging and brain-computer interfaces.
         </p>
       </div>
 

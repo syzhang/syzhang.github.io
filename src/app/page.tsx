@@ -1,6 +1,47 @@
 import Link from 'next/link';
+import fs from 'fs';
+import path from 'path';
+import matter from 'gray-matter';
+
+interface PostMetadata {
+  title: string;
+  date: string;
+  description: string;
+  tags?: string[];
+  slug: string;
+}
+
+function getLatestPosts(count: number = 2): PostMetadata[] {
+  const postsDirectory = path.join(process.cwd(), 'content', 'blog');
+
+  if (!fs.existsSync(postsDirectory)) {
+    return [];
+  }
+
+  const fileNames = fs.readdirSync(postsDirectory);
+  const posts = fileNames
+    .filter((fileName) => fileName.endsWith('.mdx'))
+    .map((fileName) => {
+      const slug = fileName.replace(/\.mdx$/, '');
+      const fullPath = path.join(postsDirectory, fileName);
+      const fileContents = fs.readFileSync(fullPath, 'utf8');
+      const { data } = matter(fileContents);
+
+      return {
+        slug,
+        title: data.title,
+        date: data.date,
+        description: data.description,
+        tags: data.tags,
+      };
+    });
+
+  return posts.sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, count);
+}
 
 export default function Home() {
+  const latestPosts = getLatestPosts(2);
+
   return (
     <div className="divide-y divide-gray-200 dark:divide-gray-700">
       <div className="prose max-w-none pb-8 pt-8 dark:prose-dark">
@@ -19,93 +60,58 @@ export default function Home() {
         <h2 className="text-3xl font-extrabold leading-9 tracking-tight text-gray-900 dark:text-gray-100 sm:text-4xl sm:leading-10 mb-8">
           Latest
         </h2>
-        <div className="divide-y divide-gray-200 dark:divide-gray-700">
-          <article className="py-12">
-            <div className="space-y-2 xl:grid xl:grid-cols-4 xl:items-baseline xl:space-y-0">
-              <div className="space-y-5 xl:col-span-3">
-                <div className="space-y-6">
-                  <div>
-                    <h3 className="text-2xl font-bold leading-8 tracking-tight">
+        {latestPosts.length === 0 ? (
+          <div className="text-gray-500 dark:text-gray-400">
+            <p>Blog posts coming soon! I'll be writing about building production LLM systems, AI agent architectures, and lessons learned from deploying ML in the real world.</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-200 dark:divide-gray-700">
+            {latestPosts.map((post) => (
+              <article key={post.slug} className="py-12">
+                <div className="space-y-2 xl:grid xl:grid-cols-4 xl:items-baseline xl:space-y-0">
+                  <div className="space-y-5 xl:col-span-3">
+                    <div className="space-y-6">
+                      <div>
+                        <h3 className="text-2xl font-bold leading-8 tracking-tight">
+                          <Link
+                            href={`/blog/${post.slug}`}
+                            className="text-gray-900 dark:text-gray-100"
+                          >
+                            {post.title}
+                          </Link>
+                        </h3>
+                        {post.tags && (
+                          <div className="flex flex-wrap mt-3">
+                            {post.tags.map((tag) => (
+                              <span
+                                key={tag}
+                                className="mr-3 text-sm font-medium uppercase text-primary-500 dark:text-primary-400"
+                              >
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div className="prose max-w-none text-gray-500 dark:text-gray-400">
+                        {post.description}
+                      </div>
+                    </div>
+                    <div className="text-base font-medium leading-6">
                       <Link
-                        href="/blog/production-llm-agents"
-                        className="text-gray-900 dark:text-gray-100"
+                        href={`/blog/${post.slug}`}
+                        className="text-primary-500 hover:text-primary-600 dark:hover:text-primary-400"
+                        aria-label={`Read more: ${post.title}`}
                       >
-                        Building Production LLM Agent Systems
+                        Read more &rarr;
                       </Link>
-                    </h3>
-                    <div className="flex flex-wrap mt-3">
-                      <span className="mr-3 text-sm font-medium uppercase text-primary-500 dark:text-primary-400">
-                        LLM
-                      </span>
-                      <span className="mr-3 text-sm font-medium uppercase text-primary-500 dark:text-primary-400">
-                        AI Agents
-                      </span>
-                      <span className="mr-3 text-sm font-medium uppercase text-primary-500 dark:text-primary-400">
-                        Production ML
-                      </span>
                     </div>
                   </div>
-                  <div className="prose max-w-none text-gray-500 dark:text-gray-400">
-                    Lessons from building and deploying agentic AI workflows that serve 300+ users in production,
-                    covering architecture decisions, tool selection, and real-world challenges.
-                  </div>
                 </div>
-                <div className="text-base font-medium leading-6">
-                  <Link
-                    href="/blog/production-llm-agents"
-                    className="text-primary-500 hover:text-primary-600 dark:hover:text-primary-400"
-                    aria-label="Read more: Building Production LLM Agent Systems"
-                  >
-                    Read more &rarr;
-                  </Link>
-                </div>
-              </div>
-            </div>
-          </article>
-
-          <article className="py-12">
-            <div className="space-y-2 xl:grid xl:grid-cols-4 xl:items-baseline xl:space-y-0">
-              <div className="space-y-5 xl:col-span-3">
-                <div className="space-y-6">
-                  <div>
-                    <h3 className="text-2xl font-bold leading-8 tracking-tight">
-                      <Link
-                        href="/blog/aws-scaling-ai-services"
-                        className="text-gray-900 dark:text-gray-100"
-                      >
-                        Scaling AI Services on AWS: From 0 to 300+ Users
-                      </Link>
-                    </h3>
-                    <div className="flex flex-wrap mt-3">
-                      <span className="mr-3 text-sm font-medium uppercase text-primary-500 dark:text-primary-400">
-                        AWS
-                      </span>
-                      <span className="mr-3 text-sm font-medium uppercase text-primary-500 dark:text-primary-400">
-                        Infrastructure
-                      </span>
-                      <span className="mr-3 text-sm font-medium uppercase text-primary-500 dark:text-primary-400">
-                        MLOps
-                      </span>
-                    </div>
-                  </div>
-                  <div className="prose max-w-none text-gray-500 dark:text-gray-400">
-                    Infrastructure decisions, cost optimization strategies, and lessons learned deploying AI services
-                    on AWS from prototype to production scale.
-                  </div>
-                </div>
-                <div className="text-base font-medium leading-6">
-                  <Link
-                    href="/blog/aws-scaling-ai-services"
-                    className="text-primary-500 hover:text-primary-600 dark:hover:text-primary-400"
-                    aria-label="Read more: Scaling AI Services on AWS"
-                  >
-                    Read more &rarr;
-                  </Link>
-                </div>
-              </div>
-            </div>
-          </article>
-        </div>
+              </article>
+            ))}
+          </div>
+        )}
 
         <div className="flex justify-end text-base font-medium leading-6">
           <Link

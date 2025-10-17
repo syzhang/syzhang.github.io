@@ -3,16 +3,15 @@ import Link from 'next/link';
 export default function Home() {
   return (
     <div className="divide-y divide-gray-200 dark:divide-gray-700">
-      <div className="space-y-2 pb-8 pt-6 md:space-y-5">
-        <p className="text-lg leading-7 text-gray-500 dark:text-gray-400">
-          AI/ML Engineer · LLMs & Agentic Workflows · Startup Co-founder/CTO
+      <div className="prose max-w-none pb-8 pt-8 dark:prose-dark">
+        <p className="text-gray-700 dark:text-gray-300">
+          AI/ML Engineer with 10+ years building machine learning systems, from realtime brain-computer interfaces to production AI agents.
         </p>
-      </div>
-
-      <div className="prose max-w-none pb-8 pt-8 dark:prose-dark xl:col-span-2">
-        <p>
-        AI/ML Engineer building production AI agents as cofounder/CTO of an AI supply chain startup.
-        Previously Oxford & Cambridge researcher working on neuroimaging and brain-computer interfaces.
+        <p className="text-gray-700 dark:text-gray-300">
+          Now building LLM-powered workflows that solve real-world problems as startup co-founder/CTO.
+        </p>
+        <p className="text-gray-700 dark:text-gray-300">
+          Previously Oxford & Cambridge researcher working on ML models of neuroimaging and brain-computer interfaces.
         </p>
       </div>
 

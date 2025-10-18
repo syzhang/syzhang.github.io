@@ -7,12 +7,22 @@ import rehypeHighlight from 'rehype-highlight';
 import rehypeSlug from 'rehype-slug';
 import remarkGfm from 'remark-gfm';
 import Link from 'next/link';
+import { calculateReadingTime } from '../../../utils/reading-time';
 
 interface Props {
   params: Promise<{ slug: string }>;
 }
 
-async function getPost(slug: string) {
+interface PostMetadata {
+  title: string;
+  description: string;
+  date: string;
+  tags?: string[];
+  readingTime?: string;
+  [key: string]: any; // Allow other frontmatter properties
+}
+
+async function getPost(slug: string): Promise<{ metadata: PostMetadata; code: string }> {
   const postsDirectory = path.join(process.cwd(), 'content', 'blog');
   const fullPath = path.join(postsDirectory, `${slug}.mdx`);
   const fileContents = fs.readFileSync(fullPath, 'utf8');
@@ -25,7 +35,8 @@ async function getPost(slug: string) {
     rehypePlugins: [rehypeHighlight, rehypeSlug],
   }));
 
-  return { metadata: data, code };
+  const readingTime = calculateReadingTime(content);
+  return { metadata: { ...data, readingTime } as PostMetadata, code };
 }
 
 export async function generateStaticParams() {
@@ -58,6 +69,11 @@ export default async function Post({ params }: Props) {
             <dt className="sr-only">Published on</dt>
             <dd className="text-base font-medium leading-6 text-gray-500 dark:text-gray-400">
               <time dateTime={metadata.date}>{metadata.date}</time>
+              {metadata.readingTime && (
+                <span className="ml-3 text-sm text-gray-500 dark:text-gray-400">
+                  • {metadata.readingTime}
+                </span>
+              )}
             </dd>
           </div>
         </dl>

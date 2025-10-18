@@ -2,6 +2,7 @@ import Link from 'next/link';
 import fs from 'fs';
 import path from 'path';
 import matter from 'gray-matter';
+import { calculateReadingTime } from '../utils/reading-time';
 
 interface PostMetadata {
   title: string;
@@ -9,6 +10,7 @@ interface PostMetadata {
   description: string;
   tags?: string[];
   slug: string;
+  readingTime?: string;
 }
 
 function getLatestPosts(count: number = 2): PostMetadata[] {
@@ -25,7 +27,8 @@ function getLatestPosts(count: number = 2): PostMetadata[] {
       const slug = fileName.replace(/\.mdx$/, '');
       const fullPath = path.join(postsDirectory, fileName);
       const fileContents = fs.readFileSync(fullPath, 'utf8');
-      const { data } = matter(fileContents);
+      const { data, content } = matter(fileContents);
+      const readingTime = calculateReadingTime(content);
 
       return {
         slug,
@@ -33,6 +36,7 @@ function getLatestPosts(count: number = 2): PostMetadata[] {
         date: data.date,
         description: data.description,
         tags: data.tags,
+        readingTime,
       };
     });
 
@@ -71,6 +75,17 @@ export default function Home() {
             {latestPosts.map((post) => (
               <article key={post.slug} className="py-12">
                 <div className="space-y-2 xl:grid xl:grid-cols-4 xl:items-baseline xl:space-y-0">
+                  <dl>
+                    <dt className="sr-only">Published on</dt>
+                    <dd className="text-base font-medium leading-6 text-gray-500 dark:text-gray-400">
+                      <time dateTime={post.date}>{post.date}</time>
+                      {post.readingTime && (
+                        <span className="ml-3 text-sm text-gray-500 dark:text-gray-400">
+                          • {post.readingTime}
+                        </span>
+                      )}
+                    </dd>
+                  </dl>
                   <div className="space-y-5 xl:col-span-3">
                     <div className="space-y-6">
                       <div>

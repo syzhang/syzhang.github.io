@@ -1,7 +1,7 @@
 ---
 title: "Simplifying Multi-Agent Systems: Reducing Root Agent Complexity"
 description: "A technical analysis of how simplifying a root orchestrator agent improved system performance and maintainability in production AI agent systems."
-date: "2025-10-18"
+date: "2025-09-27"
 tags: ["AI agents", "Google ADK", "multi agent systems", "prompt engineering", "performance optimization",]
 draft: false
 ---
@@ -14,79 +14,98 @@ A while ago, my ADK root orchestrator agent was a 150-line prompt that tried to 
 
 ```python
 # The pattern I was using - too complex
-@adk.agent
-def coordinator():
-    return types.Agent(
-        name="coordinator",
-        instruction="""
-        You are a workflow coordinator that must understand user intent deeply.
+system_prompt = """
+You are a workflow coordinator that must understand user intent deeply.
 
-        If user asks about requirements but they're not complete:
-            Check if they're asking new requirements or clarifying existing ones
-            If new requirements: transfer to requirement_agent
-            If clarifying: handle directly
+If user asks about requirements but they're not complete:
+    Check if they're asking new requirements or clarifying existing ones
+    If new requirements: transfer to requirement_agent
+    If clarifying: handle directly
 
-        elif user has seen search results:
-            Analyze if they want more results, want to select, or have questions
-            If they want to "tell me more": transfer to product_agent
-            If they want to "compare": handle directly
-            If they want new search: transfer to search_agent
+elif user has seen search results:
+    Analyze if they want more results, want to select, or have questions
+    If they want to "tell me more": transfer to product_agent
+    If they want to "compare": handle directly
+    If they want new search: transfer to search_agent
 
-        # ... 30+ more lines of conditional logic
-        """,
-        tools=[complex_state_checker, intent_analyzer, workflow_manager]
-    )
+# ... 30+ more lines of conditional logic
+"""
+
+root_agent = LlmAgent(
+    model=constants.ORCHESTRATOR_MODEL,
+    name="coordinator",
+    description="Complex workflow coordinator with deep intent analysis",
+    instruction=system_prompt,
+    tools=[
+        FunctionTool(complex_state_checker),
+        FunctionTool(intent_analyzer),
+        FunctionTool(workflow_manager)
+    ]
+)
 ```
 
 The result? Slower response times and a system that was harder to maintain. Adding new features meant understanding complex conditional branches.
 
-## The Breakthrough: Radical Simplification
+## Radical Simplification
 
-The solution wasn't more logic - it was dramatically less. I reduced my root agent from 150 lines to just 79 lines by making it **truly dumb** and letting specialists be smart.
+The solution wasn't more logic - it was dramatically less. I reduced my root agent's prompt from 150 lines to 20 lines by making it **truly dumb** and letting specialists be smart.
 
 ### The New Root Agent: Simple and Focused
 
 Here's the pattern I use now:
 
 ```python
-@adk.agent
-def coordinator():
-    return types.Agent(
-        name="coordinator",
-        instruction="""
-        You are a workflow coordinator for sourcing manufacturers.
-        Your role is simple: manage workflow progression and let specialists handle everything else.
+from google.adk.agents import LlmAgent
+from .shared_libraries import constants
 
-        **WORKFLOW STATES:**
-        1. Requirements → 2. Search → 3. Selection → 4. Specifications → 5. Quotes
+# Simplified fictional agents for illustration
+requirement_agent = LlmAgent(model=constants.PRO_MODEL, name="requirement_agent")
+search_agent = LlmAgent(model=constants.PRO_MODEL, name="search_agent")
+selection_agent = LlmAgent(model=constants.PRO_MODEL, name="selection_agent")
+specs_agent = LlmAgent(model=constants.PRO_MODEL, name="specs_agent")
+quote_agent = LlmAgent(model=constants.PRO_MODEL, name="quote_agent")
 
-        **REQUIRED TRANSFERS (Only These):**
-        - No requirements → requirement_gathering_agent
-        - Requirements complete + no search → catalog_search_agent
-        - Selections complete → product_specs_agent (automatic)
-        - Specs complete + user wants quotes → quote_preparation_agent
+# Simplified root agent with clean workflow logic
+system_prompt = """
+You are a workflow coordinator.
+Your role is simple: manage workflow progression and let specialists handle everything else.
 
-        **NEVER TRANSFER:**
-        - If a specialist agent can handle the user's request
-        - More than twice per conversation turn
+**WORKFLOW STATES:**
+1. Requirements → 2. Search → 3. Selection → 4. Specifications → 5. Quotes
 
-        **YOUR SIMPLE JOB:**
-        1. Check session state workflow progress
-        2. Transfer only for required workflow progression
-        3. Let specialist agents handle all user questions
-        4. Provide workflow summaries when complete
-        """,
-        sub_agents=[
-            requirement_gathering_agent,
-            catalog_search_agent,
-            product_selection_agent,
-            product_specs_agent,
-            quote_preparation_agent,
-        ]
-    )
+**REQUIRED TRANSFERS (Only These):**
+- No requirements → requirement_agent
+- Requirements complete + no search → search_agent
+- Selections complete → specs_agent (automatic)
+- Specs complete + user wants quotes → quote_agent
+
+**NEVER TRANSFER:**
+- If a specialist agent can handle the user's request
+- More than twice per conversation turn
+
+**YOUR SIMPLE JOB:**
+1. Check session state workflow progress
+2. Transfer only for required workflow progression
+3. Let specialist agents handle all user questions
+4. Provide workflow summaries when complete
+"""
+
+root_agent = LlmAgent(
+    model=constants.ORCHESTRATOR_MODEL,
+    name="coordinator",
+    description="Simple workflow coordinator that manages progression and delegates to specialists",
+    instruction=system_prompt,
+    sub_agents=[
+        requirement_agent,
+        search_agent,
+        selection_agent,
+        specs_agent,
+        quote_agent,
+    ]
+)
 ```
 
-That's the entire orchestrator logic. **47% less code** than the previous version. All the complex conditional logic is gone.
+That's the entire orchestrator logic. **87% less code** than the previous version. All the complex conditional logic is gone.
 
 ### What Actually Changed: The Architecture Shift
 
@@ -98,7 +117,7 @@ That's the entire orchestrator logic. **47% less code** than the previous versio
 - High cognitive load on the orchestrator
 
 **After (Simple Root Agent):**
-- 79 lines total (including imports and formatting)
+- 20 lines total
 - Simple declarative transfer rules
 - Root agent only checks workflow state
 - Clear "required transfers" vs "never transfer" rules
@@ -106,77 +125,56 @@ That's the entire orchestrator logic. **47% less code** than the previous versio
 
 The key insight: **The root agent shouldn't try to be smart.** It should just know when to pass control to someone who is.
 
-### The Secret Sauce: Better Sub-Agent Descriptions
+### Better Sub-Agent Descriptions
 
-One crucial discovery I made: **well-written sub-agent descriptions make the root agent's job trivial**. Instead of complex conditional logic, I now focus on writing clear, descriptive sub-agent definitions.
+One crucial discovery I made: **well-written sub-agent descriptions make the root agent's job much easier**. Instead of complex conditional logic, I now focus on writing clear, descriptive sub-agent definitions.
 
 ```python
 # Before: Generic description
-@adk.agent
-def catalog_search_agent():
-    return types.Agent(
-        name="catalog_search_agent",
-        description="Searches for products",
-        instruction="Search the catalog and return results"
-    )
+search_agent = LlmAgent(
+    model=constants.PRO_MODEL,
+    name="search_agent",
+    description="Searches for products",
+    instruction="Search the catalog and return results"
+)
 
 # After: Detailed, proactive description
-@adk.agent
-def catalog_search_agent():
-    return types.Agent(
-        name="catalog_search_agent",
-        description="Use PROACTIVELY when user provides search queries, search criteria, specifications, technical details, filters, price ranges, MOQ requirements, or search refinement requests. Handles text search, image search, and search refinement.",
-        instruction="""
-        You are a product search specialist. When users mention:
-        - Product types, specifications, or features
-        - Search criteria or filters
-        - Price ranges or MOQ requirements
-        - Image uploads for visual search
-        - Search refinement requests
-
-        Automatically search and display results. Handle follow-up questions about the search results.
-        """
-    )
+search_agent = LlmAgent(
+    model=constants.PRO_MODEL,
+    name="search_agent",
+    description="Use PROACTIVELY when user provides search queries, search criteria, specifications, technical details, filters, or search refinement requests. Handles text search, image search, and search refinement.",
+    instruction="""
+        You are a product search specialist...
+        # ... the rest of the agent prompt
+        """,
+    tools=[
+        FunctionTool(product_search_tool),
+        FunctionTool(image_search_tool),
+        FunctionTool(filter_results_tool)
+    ]
+)
 ```
 
 This descriptive approach means the root agent doesn't need complex logic to decide when to use each specialist - the sub-agents essentially advertise their own use cases.
 
 ### Specialists Handle the Complexity
 
-With the root agent simplified, the specialist agents became more capable and self-contained:
-
-```python
-# Product selection agent handles all details and comparisons
-@adk.agent
-def product_selection_agent():
-    return types.Agent(
-        name="product_selection_agent",
-        instruction="""
-        Provide detailed product/factory information.
-        Handle comparisons and "tell me more" requests.
-        Help users make selections.
-        Return when selection is complete.
-        """,
-        tools=[product_details_tool, comparison_tool]
-    )
-```
-
-Each specialist is now responsible for its own domain complexity, including handling user questions within that domain.
+With the root agent simplified, the specialist agents became more capable and self-contained. Each specialist is now responsible for its own domain complexity, including handling user questions within that domain.
 
 ## The Performance Impact: Why Simplicity Wins
 
 ### What Actually Improved
 
-While I didn't run formal benchmarks, the architectural simplification clearly delivered better results in practice:
+The architectural simplification delivered better results in practice:
 
-**What Felt Better:**
+**What's Improved:**
 - **Response Quality**: More consistent and appropriate agent behavior
 - **System Reliability**: Fewer confused responses and transfer loops
 - **Development Experience**: Much easier to understand and modify the system
 - **Code Maintainability**: Simpler logic meant fewer bugs and easier debugging
 
 **Code Reduction:**
-- **Root Agent**: 150 lines → 79 lines (47% reduction)
+- **Root Agent**: 150 lines → 20 lines (87% reduction)
 - **Complexity**: Eliminated nested conditional logic
 - **Cognitive Load**: Much easier for new developers to understand
 
@@ -187,55 +185,21 @@ While I didn't run formal benchmarks, the architectural simplification clearly d
 3. **Better Context Preservation**: Fewer unnecessary transfers
 4. **Specialist Ownership**: Each agent owns its domain completely
 
-### The Simpler Transfer Logic
-
-Instead of complex routing logic, the new system uses simple state-based transfers:
-
-```python
-# Old: Complex conditional logic (30+ lines)
-if not requirements_status == "COMPLETED":
-    if user is asking NEW requirements (not clarifying existing):
-        transfer_to_requirement_agent()
-    else:
-        handle_question_directly()
-elif not search_completed:
-    if catalog_results_exist:
-        if user wants explicit_request:
-            transfer_to_search_agent()
-        else:
-            display_results_and_wait()
-    elif should_trigger_web_search:
-        transfer_to_web_search_agent()
-
-# New: Simple state checking (3-4 lines)
-if not requirements_complete:
-    transfer_to_requirement_agent()
-elif search_needed:
-    transfer_to_search_agent()
-elif selection_complete:
-    transfer_to_specs_agent()
-```
-
-The LLM spends less time trying to figure out what to do and more time actually helping users.
-
-## Key Principles for Agent Simplification
+## What I Learned About Agent Simplification
 
 ### 1. The "Dumb Coordinator" Principle
 
-Your root agent shouldn't try to understand user intent deeply. It should only:
+The root agent shouldn't try to understand user intent deeply. It should only:
 - Check workflow state
 - Follow simple transfer rules
 - Let specialists handle complexity
 
 ```python
 # Bad: Complex intent analysis
-"Analyze if user is asking for clarification vs new requirements
-and determine if they need search results or want to proceed
-based on conversation context and previous interactions..."
+"Analyze user intent based on conversation context..."
 
 # Good: Simple state checking
-"Requirements complete? → Search agent needed.
-Selections complete? → Specs agent needed."
+"Requirements complete? → Search agent needed."
 ```
 
 ### 2. Specialist Ownership
@@ -252,82 +216,28 @@ Instead of complex conditional branching, use:
 - Clear workflow states
 - Simple transfer triggers
 - Explicit "never transfer" rules
-- Transfer prevention for follow-up questions
 
-## The Results: Why This Matters
+## How to Apply This Approach
 
-The architectural shift delivered more than just cleaner code:
-
-**What Actually Improved:**
-
-**Code Quality & Maintenance:**
-- **Root Agent**: 150 lines → 79 lines (47% reduction)
-- **Complexity**: Eliminated nested conditional logic
-- **Readability**: Much easier to understand the system flow
-- **Debugging**: Simpler logic meant easier troubleshooting
-
-**Development Experience:**
-- **Faster modifications**: Adding features requires understanding simple transfer rules
-- **Easier onboarding**: New developers grasp the system quickly
-- **Cleaner debugging**: Fewer places for logic to go wrong
-- **Better testing**: Simpler agents are easier to test in isolation
-
-**User Experience:**
-- Smoother conversations with fewer unnecessary transfers
-- More consistent agent behavior
-- Better context preservation throughout the workflow
-- More natural interactions with specialist agents
-
-## How to Apply This to Your Own Systems
-
-### The Simplification Checklist
+### Simplification Checklist
 
 **Before Refactoring:**
-- [ ] Identify complex conditional logic in your root agent
-- [ ] Map out your current transfer patterns
-- [ ] Measure baseline performance (response time, success rate)
-- [ ] Document which agent handles which domain
+- [ ] Identify complex conditional logic in root agent
+- [ ] Map current transfer patterns
 
 **During Refactoring:**
-- [ ] Move domain-specific logic to specialist agents
-- [ ] Simplify root agent to state-based transfers only
+- [ ] Move domain logic to specialists
+- [ ] Simplify root to state-based transfers only
 - [ ] Add explicit "never transfer" rules
-- [ ] Test each specialist agent independently
 
 **After Refactoring:**
 - [ ] Measure performance improvements
 - [ ] Monitor transfer success rates
-- [ ] Check for reduced token usage
-- [ ] Validate that all workflows still work
-
-### Common Anti-Patterns to Avoid
-
-1. **The Smart Coordinator**: Root agent trying to understand user intent deeply
-2. **Transfer Loops**: Agents immediately transferring back and forth
-3. **Conditional Chaos**: Nested if-else statements for routing logic
-4. **Context Loss**: Transferring without preserving important context
-5. **Specialist Overload**: One agent trying to handle too many domains
-
-### The 5-Question Test for Root Agent Simplicity
-
-If you can answer "yes" to these questions, your root agent is probably simple enough:
-
-1. **Can a new developer understand the transfer logic in 5 minutes?**
-2. **Are there fewer than 10 transfer rules total?**
-3. **Does each rule fit on one line?**
-4. **Are there no nested conditional statements?**
-5. **Is the agent description under 100 words?**
 
 ## TL;DR: The Key Takeaway
 
-I reduced my root orchestrator from 150 lines to 79 lines by making it truly dumb and letting specialists handle complexity. This resulted in more consistent behavior, easier maintenance, and a much simpler system to understand and modify. The secret: **root agents should coordinate, not comprehend.**
+I reduced my root orchestrator from 150 lines to 20 lines by making it truly dumb and letting specialists handle complexity. This resulted in more consistent behavior, easier maintenance, and a much simpler system to understand and modify. **Root agents should coordinate, not comprehend.**
 
 ## What's Next
 
-Now that you have the architecture principles, how do you actually ship this to production? Next week: "Production-Ready Agents: Beyond the Demo to Real-World Deployment" - where I'll share deployment patterns, monitoring strategies, and the lessons learned from running this system in production.
-
-**Follow for the complete series on building production AI agents with Google ADK.**
-
----
-
-*Have you tried building multi-agent systems? What challenges did you face? Drop your experiences in the comments!*
+I'm trying to write up what I learned from building production AI agents with Google ADK, it'll be a series of posts coming up in the next few weeks. They will likely cover architecture, deployment, monitoring, and the lessons learned from running this system in production.

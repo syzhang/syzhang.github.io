@@ -86,3 +86,50 @@
 .prose img {
   @apply rounded-lg my-6;
 }
+
+/* Improve comment visibility in code blocks */
+.prose pre .hljs-comment,
+.prose pre .hljs-quote {
+  color: #6b7280 !important; /* gray-500 for better visibility */
+  font-style: italic;
+}
+
+/* Dark theme comments */
+.dark .prose pre .hljs-comment,
+.dark .prose pre .hljs-quote {
+  color: #9ca3af !important; /* gray-400 for dark mode */
+}
+
+/* Additional syntax highlighting improvements */
+.prose pre .hljs-keyword {
+  color: #f97316 !important; /* orange-500 */
+}
+
+.prose pre .hljs-string {
+  color: #10b981 !important; /* emerald-500 */
+}
+
+.prose pre .hljs-number {
+  color: #3b82f6 !important; /* blue-500 */
+}
+
+.prose pre .hljs-function {
+  color: #8b5cf6 !important; /* violet-500 */
+}
+
+/* Dark theme adjustments */
+.dark .prose pre .hljs-keyword {
+  color: #fb923c !important; /* orange-400 */
+}
+
+.dark .prose pre .hljs-string {
+  color: #34d399 !important; /* emerald-400 */
+}
+
+.dark .prose pre .hljs-number {
+  color: #60a5fa !important; /* blue-400 */
+}
+
+.dark .prose pre .hljs-function {
+  color: #a78bfa !important; /* violet-400 */
+}

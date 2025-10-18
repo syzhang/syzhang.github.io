@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import Link from "next/link";
-import { Space_Grotesk } from 'next/font/google';
+import { Open_Sans } from 'next/font/google';
 
-const spaceGrotesk = Space_Grotesk({
+const openSans = Open_Sans({
   subsets: ['latin'],
   display: 'swap',
-  variable: '--font-space-grotesk',
+  variable: '--font-open-sans',
+  weight: ['300', '400', '600', '700', '800'],
 });
 
 export const metadata: Metadata = {
@@ -26,7 +27,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${spaceGrotesk.variable} scroll-smooth`}>
+    <html lang="en" className={`${openSans.variable} scroll-smooth`}>
       <body className="bg-white text-gray-900 dark:bg-gray-950 dark:text-gray-100 antialiased font-sans">
         <div className="mx-auto max-w-3xl px-4 sm:px-6 xl:max-w-5xl xl:px-0">
           <div className="flex h-screen flex-col justify-between">

@@ -44,16 +44,18 @@ export default function Home() {
 
   return (
     <div className="divide-y divide-gray-200 dark:divide-gray-700">
-      <div className="prose max-w-none pb-8 pt-8 dark:prose-dark">
-        <p className="text-gray-700 dark:text-gray-300">
-          AI/ML Engineer with 10+ years building machine learning systems, from realtime brain-computer interfaces to production AI agents.
-        </p>
-        <p className="text-gray-700 dark:text-gray-300">
-          Now building LLM-powered workflows that solve real-world problems as startup co-founder/CTO.
-        </p>
-        <p className="text-gray-700 dark:text-gray-300">
-          Previously Oxford & Cambridge researcher working on ML models of neuroimaging and brain-computer interfaces.
-        </p>
+      <div className="xl:grid xl:grid-cols-4 xl:items-baseline xl:space-y-0 pb-8 pt-8">
+        <div className="xl:col-span-3 prose max-w-none dark:prose-dark">
+          <p className="text-gray-700 dark:text-gray-300">
+            AI/ML Engineer with 10+ years building machine learning systems, from realtime brain-computer interfaces to production AI agents.
+          </p>
+          <p className="text-gray-700 dark:text-gray-300">
+            Now building LLM-powered workflows that solve real-world problems as startup co-founder/CTO.
+          </p>
+          <p className="text-gray-700 dark:text-gray-300">
+            Previously Oxford & Cambridge researcher working on ML models of neuroimaging and brain-computer interfaces.
+          </p>
+        </div>
       </div>
 
       <div className="py-12">

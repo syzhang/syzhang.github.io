@@ -1,6 +1,6 @@
 // Simple reading time calculation
 // Average reading speed: 200-250 words per minute
-const WORDS_PER_MINUTE = 200;
+const WORDS_PER_MINUTE = 150;
 
 export function calculateReadingTime(content: string): string {
   // Remove markdown syntax and count words

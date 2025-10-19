@@ -8,6 +8,8 @@ import rehypeSlug from 'rehype-slug';
 import remarkGfm from 'remark-gfm';
 import Link from 'next/link';
 import { calculateReadingTime } from '../../../utils/reading-time';
+import { Callout } from '../../../components/callout';
+import { Mermaid } from '../../../components/mermaid-test';
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -98,7 +100,7 @@ export default async function Post({ params }: Props) {
       <div className="divide-y divide-gray-200 pb-8 dark:divide-gray-700 xl:divide-y-0">
         <div className="divide-y divide-gray-200 dark:divide-gray-700 xl:col-span-3 xl:row-span-2 xl:pb-0">
           <div className="prose max-w-none pb-8 pt-10 dark:prose-dark">
-            <Content />
+            <Content components={{ Callout, Mermaid }} />
           </div>
         </div>
         <footer>

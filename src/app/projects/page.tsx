@@ -6,13 +6,35 @@ export default function ProjectsPage() {
   const [expandedProject, setExpandedProject] = useState<string | null>(null);
 
   const projects = [
+      {
+        "id": "intelligent-workflow-automation",
+        "title": "Intelligent Workflow Automation System",
+        "description": "Multi-agent AI system for automated information gathering and workflow orchestration using hierarchical ADK architecture with specialized agents.",
+        "category": "AI Agents",
+        "details": "A multi-agent system built on Google's Agent Development Kit that orchestrates specialized AI agents for complex information processing workflows. The system employs a hierarchical architecture with a root orchestrator coordinating eight specialized sub-agents, leveraging vector search databases, web scraping capabilities, and LLM-powered natural language processing to transform requirements into comprehensive, structured outputs with detailed specifications.",
+        "technologies": ["Google ADK", "Multi-Agent Systems", "Vector Search", "Web Scraping", "LLMs", "PostgreSQL", "Docker", "AWS ECS"],
+        "image": "/images/projects/intelligent-workflow-automation.png",
+        "imageAlt": "Multi-agent system architecture showing workflow orchestration and specialized information processing",
+        "links": []
+      },
+        {
+      id: "mindspeech",
+      title: "MindSpeech: Brain-AI interface for imagined speech",
+      description: "Developing a non-invasive brain-AI interface using high-density fNIRS and LLMs for continuous imagined speech decoding.",
+      category: "Brain-Computer Interface",
+      details: "MindSpeech enables open-vocabulary, continuous decoding of imagined speech using high-density functional near-infrared spectroscopy (fNIRS) data combined with advanced AI techniques. The project introduces a novel word cloud paradigm for data collection and employs prompt tuning with Llama2 LLM for text generation guided by brain signals, achieving significant improvements in BLEU-1 and BERT P scores.",
+      technologies: ["LLMs", "Prompt Tuning", "Pytorch", "fNIRS", "Brain-Computer Interface", "Neuroimaging"],
+      image: "/images/projects/mindspeech.png",
+      imageAlt: "MindSpeech system showing brain signal processing and text generation pipeline",
+      links: []
+    },
     {
       id: "eeg",
       title: "EEG-based neurofeedback system",
       description: "Building an EEG-based brain-machine interface system as a prototype device for pain treatment.",
       category: "Neurotechnology",
       details: "This project focused on developing a real-time EEG-based neurofeedback system for chronic pain management. The system uses brain-computer interface technology to help patients learn to modulate their own brain activity patterns associated with pain perception.",
-      technologies: ["EEG", "Brain-Computer Interface", "Real-time Signal Processing", "Neurofeedback"],
+      technologies: ["EEG", "Pytorch",  "Brain-Computer Interface", "Real-time Signal Processing", "Neurofeedback"],
       image: "/images/projects/eeg-featured.png",
       imageAlt: "EEG neurofeedback system showing brain activity patterns and interface",
       links: []

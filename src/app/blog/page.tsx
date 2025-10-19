@@ -47,15 +47,12 @@ export default function BlogPage() {
   const posts = getPostsMetadata();
 
   return (
-    <div className="divide-y divide-gray-200 dark:divide-gray-700">
-      <div className="space-y-2 pb-8 pt-6 md:space-y-5">
-        <h1 className="text-3xl font-extrabold leading-9 tracking-tight text-gray-900 dark:text-gray-100 sm:text-4xl sm:leading-10 md:text-6xl md:leading-14">
-          Blog
-        </h1>
-        <p className="text-lg leading-7 text-gray-500 dark:text-gray-400">
-          Technical posts on LLMs, AI agents, and production ML systems
-        </p>
-      </div>
+    <div className="max-w-4xl mx-auto px-4 py-12">
+      <h1 className="text-4xl font-bold mb-4">Blog</h1>
+      <p className="text-gray-700 mb-8">
+        Technical posts on LLMs, AI agents, production ML systems and more.
+        I write about lessons learned from building and playing with AI/ML, as well as general technology.
+      </p>
 
       {posts.length === 0 ? (
         <div className="pt-8">

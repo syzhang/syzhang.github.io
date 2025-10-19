@@ -1,0 +1,403 @@
+---
+title: "Deploying Google ADK Agents to AWS: Integrating with Existing Infrastructure"
+description: "How I deployed Google ADK agents to AWS ECS to integrate with existing systems and databases, moving away from Google Cloud defaults while maintaining full functionality."
+date: "2025-10-04"
+tags: ["Google ADK", "AWS", "ECS", "Docker", "deployment", "infrastructure", "integration"]
+draft: false
+---
+
+# Deploying Google ADK Agents to AWS: Integrating with Existing Infrastructure
+
+When I started building with Google ADK, the documentation naturally pushed me toward Google Cloud services. But I already had critical business systems running in AWS - my document generation system, databases, and billing infrastructure. Deploying ADK to Google Cloud would have meant complex cross-cloud integrations and data duplication.
+
+## My Architecture: AWS-Native ADK Deployment
+
+Here's the infrastructure I built that integrates ADK with my existing AWS systems:
+
+<Mermaid chart={`
+graph TD
+    subgraph "User Applications"
+        A[Frontend App] --> B[Load Balancer]
+    end
+
+    subgraph "AWS Infrastructure"
+        B --> C[ECS Fargate - ADK Agent]
+        C --> D[Aurora Serverless]
+        C --> E[S3]
+        C --> F[Secrets Manager]
+        D --> G[Sessions]
+        E --> H[Artifacts]
+        F --> I[API keys]
+
+        subgraph "Existing AWS Services"
+            C --> J[Billing API]
+            C --> K[Document System]
+            C --> L[Database]
+            J --> M[Customer Data]
+            K --> N[Generation Engine]
+            L --> O[Other Data]
+        end
+    end
+
+    subgraph "Google Cloud (LLM Services)"
+        C --> P[Vertex AI - Gemini]
+    end
+
+    style C fill:#e1f5fe
+    style G fill:#fff3e0
+    style H fill:#fff3e0
+    style I fill:#fff3e0
+`} />
+
+## The Integration Challenge
+
+My business requirements were clear:
+
+1. **Direct Database Access**: Agents needed real-time access to databases in AWS
+2. **Document System Integration**: Generated documents must flow into existing AWS generation system
+3. **Billing Validation**: Credit checking happens through existing AWS billing APIs
+4. **Customer Data**: All customer interactions must stay within our AWS infrastructure
+
+Deploying to Google Cloud would have meant:
+- Complex data replication between clouds
+- Cross-cloud API calls with latency issues
+- Duplicate infrastructure for billing and documents
+- Compliance headaches with customer data distribution
+
+## The Solution: Cross-Cloud Service Integration
+
+The key insight was building a system that uses AWS for business infrastructure while still accessing Google Cloud's LLM services. This gives me the best of both worlds:
+- **Google Cloud**: State-of-the-art LLM services (Vertex AI, Gemini) and agent building framework
+- **AWS**: All my business logic, databases, and APIs
+
+## ECS Fargate: The Container Host
+
+I chose ECS Fargate because it handles container orchestration without managing servers, and integrates nicely with my existing AWS services.
+
+### ECS Task Definition
+
+```python
+# infra/stacks/adk_stack.py
+task_definition = ecs.FargateTaskDefinition(
+    self,
+    "AdkTaskDefinition",
+    cpu=1024,  # 1 vCPU - plenty for agent workloads
+    memory_limit_mib=2048,  # 2GB RAM
+    runtime_platform=ecs.RuntimePlatform(
+        operating_system_family=ecs.OperatingSystemFamily.LINUX,
+        cpu_architecture=ecs.CpuArchitecture.X86_64
+    )
+)
+
+# Grant permissions for AWS services
+artifacts_bucket.grant_read_write(task_definition.task_role)
+db_cluster.grant_connect(task_definition.task_role, "adk_user")
+billing_api_secret.grant_read(task_definition.task_role)
+# ... and other existing services
+```
+
+### Container Configuration
+
+The container configuration handles the cross-cloud complexity:
+
+```python
+container = task_definition.add_container(
+    "AdkContainer",
+    image=ecs.ContainerImage.from_asset("../agent_codebase"),
+
+    # Health check - critical for production
+    health_check=ecs.HealthCheck(
+        command=["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"],
+        interval=Duration.seconds(30),
+        timeout=Duration.seconds(15),
+        retries=5,
+        start_period=Duration.seconds(60)
+    ),
+
+    # Port mapping for the ADK API
+    port_mappings=[
+        ecs.PortMapping(container_port=8080, protocol=ecs.Protocol.TCP)
+    ],
+
+    # Environment variables that control behavior
+    environment={
+        "AWS_DEFAULT_REGION": self.region,  # Triggers AWS mode
+        "BILLING_API_URL": billing_api_url,  # Existing billing service
+        # ... and other existing services
+    },
+
+    # Secrets from AWS Secrets Manager
+    secrets={
+        # Database credentials
+        "DATABASE_URL": ecs.Secret.from_secrets_manager(db_cluster.secret),
+        "DB_HOST": ecs.Secret.from_secrets_manager(db_cluster.secret, field="host"),
+
+        # Google Cloud authentication (stored in AWS!)
+        "GCP_SERVICE_ACCOUNT_KEY": ecs.Secret.from_secrets_manager(gcp_service_account_secret),
+
+        # ... Other API keys
+    }
+)
+```
+
+## Aurora Serverless: Session Storage That Scales
+
+Agent sessions need persistent storage. ADK offers `DatabaseSessionService` that connects to a relational database (e.g., PostgreSQL, MySQL, SQLite) to store session data persistently in tables.
+
+```python
+from google.adk.sessions import DatabaseSessionService
+# Example using a local SQLite file:
+db_url = "sqlite:///./my_agent_data.db"
+session_service = DatabaseSessionService(db_url=db_url)
+```
+
+In AWS, Aurora Serverless V2 was advertised as scaling to 0 so that there is no need to pay for idle services:
+
+```python
+# Database configuration that scales with usage
+db_cluster = rds.DatabaseCluster(
+    self,
+    "AdkSessionDatabase",
+    engine=rds.DatabaseClusterEngine.aurora_postgres(
+        version=rds.AuroraPostgresEngineVersion.VER_15_7
+    ),
+    # Serverless V2 scales to zero when idle
+    serverless_v2_min_capacity=0,
+    serverless_v2_max_capacity=1.0,
+
+    # Security and reliability
+    credentials=db_credentials,
+    vpc=vpc,
+    vpc_subnets=ec2.SubnetSelection(
+        subnet_type=ec2.SubnetType.PRIVATE_ISOLATED  # Isolated for security
+    ),
+
+    # Backup and monitoring
+    backup=rds.BackupProps(
+        retention=Duration.days(7),
+        preferred_window="03:00-04:00"
+    ),
+    enable_performance_insights=True,
+    storage_encrypted=True
+)
+```
+
+This means I only pay for database capacity when users are actually interacting with agents.
+
+
+## Cross-Cloud Authentication: The GCP Key Challenge
+
+A tricky part was handling Google Cloud authentication from AWS containers. My solution stores GCP service account keys in AWS Secrets Manager:
+
+```python
+# Store Google Cloud credentials in AWS Secrets Manager
+gcp_service_account_secret = secretsmanager.Secret.from_secret_name_v2(
+    self, "GcpServiceAccount",
+    secret_name="gcp-service-account-key"
+)
+
+# Grant access to the ECS task
+gcp_service_account_secret.grant_read(task_definition.task_role)
+```
+
+### The Entrypoint Script
+
+```bash
+#!/bin/bash
+# entrypoint.sh - handles cross-cloud authentication
+
+# If we have GCP credentials (AWS deployment)
+if [ -n "$GCP_SERVICE_ACCOUNT_KEY" ]; then
+    echo "🔑 Setting up Google Cloud authentication..."
+    echo "$GCP_SERVICE_ACCOUNT_KEY" > /tmp/gcp-key.json
+    export GOOGLE_APPLICATION_CREDENTIALS="/tmp/gcp-key.json"
+    echo "✅ GCP credentials configured"
+fi
+```
+
+This approach is secure because:
+- GCP keys are stored in AWS Secrets Manager (encrypted)
+- Keys are injected as environment variables (not in container image)
+- Temporary file permissions are restricted
+- Keys are only available at runtime
+
+## Integration with Existing AWS Services
+
+The real power of this architecture is how seamlessly it integrates with existing systems:
+
+### Billing Integration
+
+Running agents in ECS makes billing integration incredibly efficient. Since the containers are in the same AWS environment as my existing billing infrastructure, I can enforce credit checks before agents start any work - preventing costly AI operations for users without sufficient credits.
+
+The middleware intercepts session creation requests and validates credits in real-time:
+
+```python
+# Configure billing integration
+environment={
+    "BILLING_API_URL": existing_billing_service_endpoint,
+    "CREDIT_VALIDATION_ENABLED": "true",
+}
+
+# Middleware that validates credits before agent sessions start
+@ app.middleware("http")
+async def credit_validation_middleware(request: Request, call_next):
+    if request.method == "POST" and "/sessions" in request.url.path:
+        user_email = extract_user_from_request(request)
+
+        # Check user's credit balance via existing billing system
+        billing_status = await check_user_credits(user_email)
+
+        if not billing_status.has_sufficient_credits:
+            return JSONResponse(
+                status_code=402,  # Payment Required
+                content={"error": "insufficient_credits"}
+            )
+```
+
+### Document System Integration
+
+Running agents in the same AWS environment as my existing document generation system provides significant advantages. The integration eliminates network latency and complexity by allowing direct API calls to established services:
+
+```python
+# Agents can directly call existing document generation system
+async def generate_document_for_user(user_id: str, product_specs: dict):
+    """Call existing AWS document generation system"""
+
+    # Direct API call to existing service
+    quote_response = await httpx.post(
+        f"{os.getenv('API_ENDPOINT')}/generate",
+        json={
+            "customer_id": user_id,
+            "specifications": specifications,
+            "source": "ai_agent"
+        }
+    )
+
+    return quote_response.json()
+```
+
+**Key Benefits:**
+- **Zero latency**: Direct internal AWS API calls without crossing cloud boundaries
+- **No data duplication**: Documents flow directly into existing generation pipeline
+- **Unified error handling**: Same error logging and monitoring systems
+- **Consistent billing**: Document generation costs tracked in existing AWS billing system
+
+### Database Integration
+
+Direct database access from ECS containers to existing AWS databases eliminates the need for complex data synchronization or API gateways. Agents can query business data in real-time using the same credentials and security groups as other AWS services:
+
+```python
+# Direct access to database
+async def get_data(id: str):
+    """Query existing database"""
+
+    # Use AWS database credentials
+    db_url = os.getenv('DB_URL')
+
+    async with asyncpg.connect(db_url) as conn:
+        result = await conn.fetch(
+            "SELECT * FROM table WHERE specifications @> $1",
+            [id]
+        )
+
+    return result
+```
+
+**Key Benefits:**
+- **Unified security**: Same IAM roles and VPC security groups as other services
+- **Reduced complexity**: No ETL pipelines or data synchronization needed
+
+## Deployment Automation
+
+The entire deployment is automated through AWS CDK:
+
+```python
+# Auto-scaling based on demand
+scalable_target = fargate_service.service.auto_scale_task_count(
+    min_capacity=1,
+    max_capacity=6 if deployment_type == DeploymentType.PRODUCTION else 3
+)
+
+# Scale based on CPU usage
+scalable_target.scale_on_cpu_utilization(
+    "CpuScaling",
+    target_utilization_percent=70,
+    scale_in_cooldown=Duration.minutes(5),
+    scale_out_cooldown=Duration.minutes(2)
+)
+
+# Scale based on memory usage
+scalable_target.scale_on_memory_utilization(
+    "MemoryScaling",
+    target_utilization_percent=80,
+    scale_in_cooldown=Duration.minutes(5),
+    scale_out_cooldown=Duration.minutes(2)
+)
+```
+
+## Monitoring and Observability
+
+I get complete visibility into the system through CloudWatch:
+
+```python
+# Structured logging for debugging
+log_group = logs.LogGroup(
+    self,
+    "AdkLogGroup",
+    log_group_name=f"/ecs/{deployment_type.stack_prefix()}adk-agent",
+    retention=logs.RetentionDays.ONE_WEEK
+)
+
+# Container sends structured logs to CloudWatch
+container = task_definition.add_container(
+    "AdkContainer",
+    logging=ecs.LogDrivers.aws_logs(
+        log_group=log_group,
+        stream_prefix="adk-agent"
+    )
+)
+```
+
+This gives me:
+- Real-time logs from all agent conversations
+- Error tracking and alerting
+- Debugging capabilities across the entire system
+
+## The Results: Seamless Integration
+
+After running this in production for 3 months:
+
+**Integration Benefits:**
+- **Zero latency** between agents and existing AWS services
+- **Direct database access** to supplier and customer data
+- **Unified billing** through existing AWS billing system
+- **Consistent security model** across all services
+
+**Technical Benefits:**
+- **Cross-cloud authentication** handled securely
+- **Auto-scaling** based on real usage patterns
+- **Complete observability** through CloudWatch
+
+**Business Benefits:**
+- **No data duplication** between clouds
+- **Unified compliance** and security model
+
+## Why This Approach Works
+
+1. **Native Integration**: Direct access to existing AWS services 
+2. **Security Consistency**: Same security model across all services
+3. **Performance**: No cross-cloud latency for business logic
+4. **Compliance**: All customer data stays within AWS infrastructure
+5. **Operational Simplicity**: Single monitoring, logging, and billing system
+
+## TL;DR: The Key Takeaway
+
+Instead of deploying agents built with Google ADK with Google Cloud, I built a deployment that integrates ADK with my existing AWS infrastructure. This gives me direct access to my systems, databases, and billing APIs while still using Google Cloud for LLM services. The result is a seamless, secure, and high-performance system that leverages the best of both clouds.
+
+
+
+---
+
+*This is part 2 of my series reflecting on building production AI agents with Google ADK and AWS. Check out the other posts in the series:*
+
+1. *[Simplifying Multi-Agent Systems: Reducing Root Agent Complexity](./simplifying-multi-agent-systems)*

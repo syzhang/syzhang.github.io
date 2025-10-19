@@ -1,0 +1,588 @@
+---
+title: "Building Custom Frontends for ADK Agents: Real-Time Streaming and State Management"
+description: "How to built a production-ready React frontend for Google ADK agents with Server-Sent Events streaming, structured data rendering, and multi-agent state management."
+date: "2025-10-18"
+tags: ["Google ADK", "React", "TypeScript", "Server-Sent Events", "frontend", "state management"]
+draft: false
+---
+
+# Building Custom Frontends for ADK Agents: Real-Time Streaming and State Management
+
+When I first integrated Google ADK agents into our existing platform, we already had a mature frontend with active users. Simply adding ADK's default chat interface wasn't an option - it would break our established user experience and design system. I needed to integrate ADK's powerful multi-agent capabilities into our existing React frontend while maintaining the smooth, professional experience our users expected.
+
+## The Frontend Architecture: React + TypeScript + Real-Time Streaming
+
+Here's the architecture I built to handle ADK's streaming responses and complex agent workflows:
+
+<Mermaid chart={`
+graph LR
+    subgraph "React Frontend"
+        A[Chat Component]
+        B[Message Renderer]
+        C[Session Manager]
+        D[State Management]
+    end
+
+    subgraph "ADK Backend"
+        E[Agent Orchestrator]
+        F[Streaming API]
+        G[Event Parser]
+        H[Billing Middleware]
+    end
+
+    subgraph "Communication"
+        I[Server-Sent Events]
+    end
+
+    A --> B
+    A --> C
+    A --> D
+    C --> E
+    A --> I
+    I --> F
+    F --> G
+    A --> H
+
+    style A fill:#e1f5fe
+    style F fill:#fff3e0
+    style I fill:#fff3e0
+    style G fill:#fff3e0
+`} />
+
+## The Streaming Challenge: Server-Sent Events Integration
+
+The biggest technical challenge was handling ADK's streaming responses. The backend sends events (agent transfer, tool usage etc) via Server-Sent Events (SSE), and the frontend needs to parse these events in real-time while maintaining smooth UI updates.
+
+### SSE Connection Management
+
+The biggest challenge with Server-Sent Events is managing the stream lifecycle properly, including connection establishment, continuous data processing, and cleanup when the stream ends. The key insight is that SSE data comes in chunks that need to be buffered and parsed line by line.
+
+```typescript
+// Core streaming connection handler (ADK's built in API)
+const establishStreamConnection = async (
+  sessionId: string,
+  message: string,
+  onEvent: (event: ADKEvent) => void,
+  onComplete: () => void,
+  onError: (error: Error) => void
+) => {
+  const response = await fetch('/run_sse', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'text/event-stream',
+    },
+    body: JSON.stringify({
+      app_name: 'agent',
+      user_id: userId,
+      session_id: sessionId,
+      new_message: {
+        role: 'user',
+        parts: [{ text: message }]
+      }
+    })
+  });
+
+  const reader = response.body?.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  const processStream = async () => {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const eventData = JSON.parse(line.slice(6));
+            onEvent(eventData);
+          } catch (parseError) {
+            // Handle malformed events gracefully
+          }
+        }
+      }
+    }
+    onComplete();
+  };
+
+  await processStream();
+};
+```
+
+The critical part here is the buffer management. SSE streams can send partial data, so we need to accumulate incomplete lines in the buffer and only process complete lines. This prevents JSON parsing errors from malformed chunks.
+
+### Event Parsing and State Management
+
+ADK events are more complex than simple chat messages. They can contain multiple content types, function calls, agent transfers, and metadata. A robust parser needs to handle all these variations while maintaining a clean state structure for the UI.
+
+```typescript
+interface ADKEvent {
+  id: string;
+  timestamp: number;
+  author: string;
+  content: {
+    role: 'model' | 'user';
+    parts: Array<{
+      text?: string;
+      functionCall?: FunctionCall;
+      functionResponse?: FunctionResponse;
+    }>;
+  };
+  actions?: {
+    transferToAgent?: string;
+  };
+}
+```
+
+The event structure shows how ADK separates different types of content. Each event can have multiple parts - text, function calls, and function responses. This design allows agents to stream text while simultaneously executing actions and transferring to other agents.
+
+```typescript
+// Parse events into UI-friendly format
+const parseADKEvent = (event: ADKEvent): ParsedEvent => {
+  const result: ParsedEvent = {
+    content: '',
+    functionCalls: [],
+    agentTransfers: [],
+    agentName: event.author
+  };
+
+  // Extract text content
+  for (const part of event.content.parts) {
+    if (part.text) {
+      result.content += part.text;
+    }
+
+    // Handle function calls (agent actions)
+    if (part.functionCall) {
+      result.functionCalls.push({
+        name: part.functionCall.name,
+        arguments: part.functionCall.args,
+        status: 'pending',
+        timestamp: new Date(event.timestamp * 1000).toISOString()
+      });
+    }
+
+    // Handle function responses (results)
+    if (part.functionResponse?.response?.result) {
+      result.content += part.functionResponse.response.result;
+    }
+  }
+
+  // Handle agent transfers
+  if (event.actions?.transferToAgent) {
+    result.agentTransfers.push({
+      fromAgent: event.author,
+      toAgent: event.actions.transferToAgent,
+      timestamp: new Date(event.timestamp * 1000).toISOString()
+    });
+  }
+
+  return result;
+};
+```
+
+This parser transforms ADK's complex event format into a UI-friendly structure. Notice how we collect text content from multiple sources (direct text and function responses), track function calls separately for visual indicators, and handle agent transfers for workflow transparency.
+
+## Session Management: Persistent Conversations
+
+Agent conversations need to persist across page reloads and browser sessions. I implemented a robust session management system that handles session creation, restoration, and real-time state synchronization.
+
+### Session Creation and Restoration
+
+The key insight with session management is that you need both client-side session IDs for immediate UI updates and server-side session persistence for data durability. The dual approach ensures users can continue conversations even after browser restarts. 
+
+Session creation simply calls ADK's built-in endpoint:
+
+```typescript
+const createSession = async (): Promise<string> => {
+  const sessionId = `session-${Date.now()}`;
+
+  const response = await fetch(`/apps/${appName}/users/${userId}/sessions/${sessionId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({})
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to create session: ${response.status}`);
+  }
+
+  return sessionId;
+};
+```
+
+Similarly for session restoration:
+
+```typescript
+const loadExistingSession = async (sessionId: string): Promise<SessionData> => {
+  const response = await fetch(
+    `/apps/${appName}/users/${userId}/sessions/${sessionId}`,
+    {
+      headers: { 'Cache-Control': 'no-cache' }
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to load session: ${response.status}`);
+  }
+
+  const sessionData = await response.json();
+
+  // Convert ADK events to messages
+  const messages = convertADKEventsToMessages(sessionData.events || []);
+
+  return {
+    sessionId,
+    messages,
+    currentAgent: getCurrentAgent(sessionData.events)
+  };
+};
+```
+
+## Complex Data Rendering: Structured Content Parser
+
+ADK agents don't just return text - they return structured data in dict objects and store them in session state. I built a flexible rendering system that handles different content types:
+
+### Structured Data Detection and Rendering
+
+First, I defined an interface to represent different types of structured content that agents might return:
+
+```typescript
+interface StructuredContent {
+  type: 'product' | 'data' | 'document' | 'others';
+  data: any;
+  metadata?: {
+    source: string;
+    confidence: number;
+    timestamp: string;
+  };
+}
+```
+
+The core detection logic scans message content for JSON blocks with content descriptions returned by the backend, and categorizes them based on their structure. This allows the frontend to identify what kind of data the agent is returning:
+
+```typescript
+// Detect structured content in message
+const detectStructuredContent = (content: string): StructuredContent[] => {
+  const structuredContents: StructuredContent[] = [];
+
+  // Look for JSON blocks in content (content type indicator returned by backend)
+  const jsonBlocks = content.match(/```json\n([\s\S]*?)\n```/g);
+
+  if (jsonBlocks) {
+    for (const block of jsonBlocks) {
+      try {
+        const jsonData = JSON.parse(block.replace(/```json\n|```\n?/g, ''));
+
+        // Check for various data types your agent might return
+        if (jsonData.someProductField) {
+          structuredContents.push({
+            type: 'product',
+            data: jsonData.someProductField
+          });
+        }
+
+        if (jsonData.someDataField) {
+          structuredContents.push({
+            type: 'data',
+            data: jsonData.someDataField
+          });
+        }
+
+        if (jsonData.someDocumentField) {
+          structuredContents.push({
+            type: 'document',
+            data: jsonData.someDocumentField
+          });
+        }
+      } catch (parseError) {
+        // Invalid JSON, skip
+      }
+    }
+  }
+
+  return structuredContents;
+};
+```
+
+Once structured content is detected, the renderer component uses a component registry pattern to map each content type to its specialized renderer:
+
+```typescript
+// Component registry for different content types
+const StructuredStateRenderer = ({ message, ...props }) => {
+  const structuredContents = detectStructuredContent(message.content);
+
+  return (
+    <div className="space-y-4">
+      {/* Render text content */}
+      {message.content && (
+        <div className="whitespace-pre-wrap text-sm">
+          {stripStructuredBlocks(message.content)}
+        </div>
+      )}
+
+      {/* Render structured content */}
+      {structuredContents.map((content, index) => {
+        switch (content.type) {
+          case 'product':
+            return (
+              <ProductRenderer
+                key={index}
+                data={content.data}
+                onAction={props.onProductAction}
+              />
+            );
+
+          case 'data':
+            return (
+              <DataRenderer
+                key={index}
+                data={content.data}
+                onAction={props.onDataAction}
+              />
+            );
+
+          case 'document':
+            return (
+              <DocumentRenderer
+                key={index}
+                data={content.data}
+                onAction={props.onDocumentAction}
+              />
+            );
+
+          default:
+            return null;
+        }
+      })}
+    </div>
+  );
+};
+```
+
+## File Upload Integration: Multi-Modal Interactions
+
+Modern AI agents need to handle more than just text. I implemented a comprehensive file upload system that integrates with ADK's artifact system:
+
+### Attachment Handling
+
+File uploads enable multi-modal agent interactions - users can upload images, PDFs, or documents for the agent to analyze. The key is converting browser File objects into ADK's expected format.
+
+ADK expects attachments as base64-encoded strings with metadata. Here's the interface and conversion logic:
+
+```typescript
+interface ADKAttachment {
+  id: string;
+  filename: string;
+  contentType: string;
+  fileData?: string; // base64 encoded
+  size: number;
+}
+
+const handleFileSelect = async (files: FileList) => {
+  const newAttachments: ADKAttachment[] = [];
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    const base64Data = await fileToBase64(file);
+
+    newAttachments.push({
+      id: `attachment-${Date.now()}-${i}`,
+      filename: file.name,
+      contentType: file.type,
+      fileData: base64Data,
+      size: file.size
+    });
+  }
+
+  return newAttachments;
+};
+```
+
+The `fileToBase64` helper uses the FileReader API to convert File objects into base64 strings that can be sent via JSON to the backend.
+
+### Message Assembly with Attachments
+
+Once attachments are prepared, they need to be combined with text into ADK's message format. ADK messages use a `parts` array that can contain both text and inline data:
+
+```typescript
+const sendMessageWithAttachments = async (
+  text: string,
+  attachments: ADKAttachment[],
+  sessionId: string
+) => {
+  const messageParts: MessagePart[] = [];
+
+  // Add text part if present
+  if (text.trim()) {
+    messageParts.push({ text: text.trim() });
+  }
+
+  // Add each attachment as inline_data
+  for (const attachment of attachments) {
+    if (attachment.fileData) {
+      messageParts.push({
+        inline_data: {
+          mime_type: attachment.contentType,
+          data: attachment.fileData
+        }
+      });
+    }
+  }
+
+  // Send via SSE endpoint
+  const response = await fetch('/run_sse', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      app_name: 'your_agent',
+      user_id: userId,
+      session_id: sessionId,
+      new_message: {
+        role: 'user',
+        parts: messageParts
+      }
+    })
+  });
+
+  // Handle streaming response...
+};
+```
+
+This structure allows agents to receive both text instructions and file attachments in a single message, enabling workflows like "analyze this image" or "extract data from this PDF."
+
+## Multi-Agent Workflow Management
+
+When working with hierarchical agent systems, visibility into which agent is handling request and what actions are being taken can be helpful. This transparency builds trust and helps users understand complex workflows.
+
+### Tracking Agent Transfers and Function Calls
+
+ADK agents can transfer conversations to specialized agents and execute function calls. The UI should surface both of these actions:
+
+```typescript
+// Show which agent is currently active
+const AgentTransferIndicator = ({ currentAgent, lastTransfer }) => {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="font-medium">{currentAgent}</span>
+      {lastTransfer && (
+        <span className="text-xs text-gray-500">
+          (from {lastTransfer.fromAgent})
+        </span>
+      )}
+    </div>
+  );
+};
+
+// Display function calls as they execute
+const FunctionCallDisplay = ({ functionCalls }) => {
+  return (
+    <div className="space-y-2">
+      {functionCalls.map((call, index) => (
+        <div key={index} className="flex items-center gap-2 p-2 bg-slate-50 rounded">
+          <span className="font-mono text-sm">{call.name}</span>
+          <span className={`text-xs ${
+            call.status === 'success' ? 'text-green-600' :
+            call.status === 'error' ? 'text-red-600' : 'text-gray-500'
+          }`}>
+            {call.status}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+};
+```
+
+These components parse the ADK event stream (from earlier sections) and display agent workflow state in real-time as the conversation progresses.
+
+## Performance Optimizations
+
+As conversations grow to dozens of messages, naive rendering approaches will cause performance issues. Two key optimizations are message virtualization and memory management.
+
+### Message Virtualization
+
+Instead of rendering all messages at once, only render what's visible in the viewport:
+
+```typescript
+const VirtualizedMessageList = ({ messages }) => {
+  const [visibleRange, setVisibleRange] = useState({ start: 0, end: 50 });
+
+  const handleScroll = useCallback(
+    throttle((scrollTop, clientHeight) => {
+      const itemHeight = 120;
+      const start = Math.max(0, Math.floor(scrollTop / itemHeight) - 5);
+      const end = Math.min(
+        start + Math.ceil(clientHeight / itemHeight) + 10,
+        messages.length
+      );
+      setVisibleRange({ start, end });
+    }, 100),
+    [messages.length]
+  );
+
+  return (
+    <div style={{ height: messages.length * 120 }}>
+      {messages.slice(visibleRange.start, visibleRange.end).map((message, index) => (
+        <MessageItem key={message.id} message={message} />
+      ))}
+    </div>
+  );
+};
+```
+
+### Memory Management
+
+Limit the total number of messages kept in state to prevent memory leaks in long-running sessions:
+
+```typescript
+const useMessageCleanup = (messages, maxMessages = 1000) => {
+  useEffect(() => {
+    if (messages.length > maxMessages) {
+      const excess = messages.length - maxMessages;
+      messages.splice(0, excess); // Remove oldest messages
+    }
+  }, [messages.length]);
+};
+```
+
+Together, these optimizations ensure smooth performance even in conversations with thousands of messages.
+
+## The Results: Production-Ready Agent Interface
+
+After running this in production for some time:
+
+**User Experience Benefits:**
+- **Real-time streaming** shows agent responses and events as they're generated
+- **Persistent sessions** maintain conversation state across browser sessions
+- **File upload support** enables multi-modal interactions
+- **Structured data rendering** displays complex information in usable formats
+- **Agent transparency** shows which specialist agent is handling each task
+
+**Technical Benefits:**
+- **Robust error handling** gracefully manages network failures and billing issues
+- **Performance optimization** handles long conversations without UI degradation
+- **State synchronization** keeps UI consistent with backend agent state
+
+**Business Benefits:**
+- **Session persistence** reduces friction in ongoing workflows
+- **Professional UI** builds on top of previous trusted platform
+- **Scalable architecture** supports hundreds of concurrent users
+
+
+## TL;DR: The Key Takeaway
+
+Building a production frontend for ADK agents requires handling real-time streaming, complex multi-agent workflows, file uploads, and structured data render integration. The key is designing around the streaming nature of AI responses while maintaining smooth user experience through careful state management and performance optimization. The result is a professional-grade interface that makes AI agents accessible and useful for real business workflows on an existing platform.
+
+---
+
+*This is part 4 of my series reflecting on building production AI agents with Google ADK. Check out the other posts in the series:*
+
+1. [Simplifying Multi-Agent Systems: Reducing Root Agent Complexity](./simplifying-multi-agent-systems)
+2. [Deploying Google ADK Agents to AWS: Integrating with Existing Infrastructure](./deploy-adk-aws)
+3. [Implementing Retry Strategies in Google ADK: Handling 429 Errors Gracefully](implementing-retry-strategies-google-adk)

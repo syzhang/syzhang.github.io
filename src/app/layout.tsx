@@ -3,6 +3,7 @@ import "./globals.css";
 import Link from "next/link";
 import { Open_Sans } from 'next/font/google';
 import { Github, Linkedin, GraduationCap } from 'lucide-react';
+import MobileMenu from '@/components/MobileMenu';
 
 const openSans = Open_Sans({
   subsets: ['latin'],
@@ -69,6 +70,7 @@ export default function RootLayout({
                 >
                   Publications
                 </Link>
+                <MobileMenu />
               </nav>
             </header>
             <main className="mb-auto">{children}</main>

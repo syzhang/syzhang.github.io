@@ -1,0 +1,243 @@
+---
+title: "Profiling and Optimizing AWS Lambda Cold Starts"
+description: "How to improve Lambda cold start performance by 56% through profiling, lazy imports, and strategic memory allocation - making it actually cheaper to run."
+date: "2025-10-25"
+tags: ["AWS", "Lambda", "performance", "optimization", "cold-starts", "serverless", "profiling"]
+draft: false
+---
+
+# Optimizing AWS Lambda Cold Starts: 56% Faster
+
+Recently our order page has been loading quite slowly. Cold starts were affecting user experience - users waited 2.68 seconds before seeing any response, long enough to assume the app froze. After profiling and optimization, I cut that to 1.17 seconds.
+
+## The Problem
+
+My order page Lambda experienced cold starts on nearly every off-peak load. Users would navigate to view their order and... nothing. Mobile users refreshed the page thinking it broke, abandoning their session.
+
+## Profiling: Find the 80/20
+
+I added timing instrumentation to find the bottleneck:
+
+```python
+import time
+import logging
+
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+start_time = time.time()
+
+# Time each major import
+import json
+import os
+import boto3
+logger.info(f"Basic imports: {{time.time() - start_time:.3f}}s")
+
+stripe_start = time.time()
+import stripe
+logger.info(f"Stripe import: {{time.time() - stripe_start:.3f}}s")
+
+tracking_start = time.time()
+from services.tracking_service import TrackingService
+logger.info(f"TrackingService import: {{time.time() - tracking_start:.3f}}s")
+
+logger.info(f"Total cold start: {{time.time() - start_time:.3f}}s")
+```
+
+CloudWatch revealed the following:
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Cold Start Breakdown (2.68s total)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Basic imports     ▓░░░░░░░░░░░░░░░  3%  (0.09s)
+Stripe SDK        ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ 63%  (1.70s)
+TrackingService   ▓▓▓▓▓▓░░░░░░░░░░ 22%  (0.59s)
+Other             ▓▓░░░░░░░░░░░░░░ 12%  (0.30s)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+**85% of cold start time = two imports** (Stripe + TrackingService)
+
+My CloudWatch metrics showed:
+- **90%** of requests didn't use Stripe (viewing orders, status checks, webhooks)
+- **Only 10%** hit the payment endpoint to create checkout sessions
+
+Every cold start paid a 1.7s Stripe tax, even when just loading the order page.
+
+## The Fix: Lazy Imports
+
+Only import heavy dependencies when actually needed.
+
+**Before: Eager Loading**
+
+```python
+# handler.py - OLD
+import stripe  # 63% of cold start time, used by 10% of requests
+from services.tracking_service import TrackingService  # 22% of time
+
+def lambda_handler(event, context):
+    path = event.get('path', '')
+
+    if '/create-checkout' in path:
+        return PaymentService.create_checkout(event)  # 10% of traffic
+    elif '/order' in path:
+        return OrderService.get_order(event)  # Order page - no Stripe needed!
+    else:
+        return {{'statusCode': 200}}  # 90% of traffic pays import penalty
+```
+
+**After: Lazy Loading**
+
+```python
+# handler.py - OPTIMIZED
+import json
+import boto3
+
+def lambda_handler(event, context):
+    path = event.get('path', '')
+
+    if '/create-checkout' in path:
+        from services.payment_service import PaymentService  # Import only when needed
+        return PaymentService.create_checkout(event)
+
+    elif '/tracking' in path:
+        from services.tracking_service import TrackingService
+        return TrackingService.update_tracking(event)
+
+    elif '/order' in path:
+        from services.order_service import OrderService  # Fast - no Stripe import!
+        return OrderService.get_order(event)
+
+    else:
+        return {{'statusCode': 200, 'body': json.dumps({{'status': 'ok'}})}}  # Fast path
+```
+
+## Results: The Complete Journey
+
+I applied optimizations in stages to measure each impact:
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Optimization Journey
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Stage                           Cold Start    Change          Total
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Original (eager loading)        2,680ms       -               -
++ Lazy Stripe SDK               2,255ms       ↓ 425ms (16%)   -16%
++ Lazy TrackingService          2,190ms       ↓  65ms  (3%)   -18%
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+**Key insight:** Lazy imports gave **18% improvement**, but memory allocation was the real win with **47% additional improvement**.
+
+## The Memory Surprise: 47% Additional Improvement
+
+After lazy imports reached 2.19s, increasing memory from 256MB → 512MB was tested. Lambda allocates CPU proportionally to memory, so the expectation was 10-15% improvement.
+
+**What happened:** Cold start dropped to 1.17s - a **47% improvement (1,020ms)**.
+
+**Why so large?** Lambda's cold start has multiple phases:
+
+**AWS Infrastructure (55-66% faster - CPU-bound):**
+- Download & decompress deployment package
+- Extract files and setup filesystem
+- Initialize Python runtime
+
+**Previous Code Change (33% faster - I/O-bound):**
+- Import statements (disk reads)
+
+**Key insight:** CPU-bound infrastructure work (decompress, extract, runtime init) improved dramatically with more vCPU. I/O-bound imports improved less since they're waiting on disk, not CPU.
+
+Lazy imports reduced *what* needed to load (18% gain). Memory increase sped up *how fast* AWS could prepare the environment (47% gain). The bottleneck was CPU-bound infrastructure, not I/O-bound imports.
+
+### Final Results: Faster Cold Starts
+
+With both optimizations in place (lazy imports + 512MB), the final cold start time becomes:
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Complete Optimization Journey
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Stage                           Cold Start    Change          Total
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Original (eager loading)        2,680ms       -               -
++ Lazy Stripe SDK               2,255ms       ↓ 425ms (16%)   -16%
++ Lazy TrackingService          2,190ms       ↓  65ms  (3%)   -18%
++ Increase to 512MB             1,170ms       ↓1020ms (47%)   -56%🎉
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+The order page went from 2.68s to 1.17s. Still room for improvement but users no longer think the page is frozen.
+
+## The Cost Paradox
+
+**The more expensive config was actually cheaper:**
+
+**256MB Lambda:**
+- Duration: ~3.2s (2.68s cold + 0.5s execution)
+- Cost per 1M requests: **$13.50**
+
+**512MB Lambda:**
+- Duration: ~1.5s (1.17s cold + 0.3s execution)
+- Cost per 1M requests: **$12.70** (-6%)
+
+Faster execution offset the higher per-GB cost. Plus, 56% faster response was worth far more than $0.80/million requests.
+
+## When to Optimize
+
+Not every Lambda needs this. My decision framework:
+
+| Factor | Optimize | Skip |
+|--------|----------|------|
+| **Latency** | User-facing (Order checking) | Background jobs |
+| **Traffic** | Spiky/low (frequent cold starts) | Consistent (&gt;1 req/min) |
+| **Imports** | Heavy libs (&gt;500ms) | Lightweight (&lt;100ms) |
+| **Patterns** | Different paths need different deps | All paths need same deps |
+
+My order page hit all criteria, making it the ideal candidate for optimisation.
+
+## Additional Notes
+
+**1. Import Side Effects**
+
+Some libraries execute code on import:
+
+```python
+# Breaks if imported at function level
+import stripe
+stripe.api_key = os.environ['STRIPE_SECRET_KEY']  # Runs on import!
+
+# Solution: wrap in function
+def get_stripe_client():
+    import stripe
+    if not hasattr(stripe, '_configured'):
+        stripe.api_key = os.environ['STRIPE_SECRET_KEY']
+        stripe._configured = True
+    return stripe
+```
+
+**2. Error Handling**
+
+Import errors now happen during requests, not initialization:
+
+```python
+def lambda_handler(event, context):
+    try:
+        from services.payment_service import PaymentService
+        return PaymentService.process_payment(event)
+    except ImportError as e:
+        logger.error(f"Import failed: {{e}}")
+        return {{'statusCode': 500, 'body': json.dumps({{'error': 'Service unavailable'}})}}
+```
+
+## TL;DR: The Key Takeaway
+
+1. **Profile first** - 85% of my cold start was in two imports. The 80/20 rule applies here too.
+
+2. **Lazy imports = big wins** - When different paths need different deps, lazy loading helps the majority of requests.
+
+3. **Memory ≠ just RAM** - More Lambda memory = more CPU, which speeds up runtime init even if imports stay the same.
+
+4. **Faster can be cheaper** - Higher memory costs more per GB-second but can reduce total bill through faster execution.
+

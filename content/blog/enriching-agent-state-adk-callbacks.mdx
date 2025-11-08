@@ -1,0 +1,274 @@
+---
+title: "Enriching Agent State with Google ADK Callbacks"
+description: "How to use after_tool_callback to enrich agent state with progressive updates, eliminating HTTP overhead while ensuring agents have complete data for follow-up conversations."
+date: "2025-11-08"
+tags: ["Google ADK", "callbacks", "agent state", "progressive updates", "after_tool_callback"]
+draft: false
+---
+
+# Enriching Agent State with Google ADK Callbacks
+
+Last week, I wrote about building progressive data loading with custom FastAPI endpoints and Server-Sent Events. That approach is great for real-time frontend updates, but there's another challenge: ensuring agents have enriched data available for follow-up questions without making users wait or polling external APIs.
+
+Google ADK has `after_tool_callback`, a simpler pattern that updates agent state directly after tool execution. While custom endpoints stream progress to users, callbacks persist enriched data in agent sessions. 
+
+## The Scenario: Search Now, Enrich for Later
+
+Imagine a document search agent. A user asks a question, and the agent quickly returns 15 results with titles and URLs. Fast response, great experience.
+
+But now the user asks: "Which ones have detailed examples?" or "Show me diagrams."
+
+Without enrichment, the agent only has basic metadata, no content summaries, no extracted images, no cached details. It will need to re-fetch everything on every follow-up question, creating terrible latency.
+
+The solution: enrich the results after the initial search completes, then save that enriched data to the agent's session state. Future questions use the enriched data instantly.
+
+## What is `after_tool_callback`?
+
+`after_tool_callback` is a hook that ADK executes automatically after any tool completes. It receives four parameters:
+
+- `tool`: The `BaseTool` instance that just executed
+- `args`: Arguments passed to the tool
+- `tool_context`: ADK's `ToolContext` with session state and agent info
+- `tool_response`: The result dictionary returned by the tool
+
+The callback can return `None` (keeps the original result) or a new dictionary (replaces the tool's result). It has direct access to `tool_context.state`, which allows updating the session state.
+
+```python
+from google.adk.agents import LlmAgent
+from google.adk.tools import FunctionTool
+
+document_search_agent = LlmAgent(
+    model=model,
+    name="document_search_agent",
+    tools=[
+        FunctionTool(search_documents)
+    ],
+    after_tool_callback=after_search_enrich_callback
+)
+```
+
+Now, every time a tool completes, `after_search_enrich_callback` runs automatically. No manual triggering, no configuration — it just works.
+
+## The Callback Pattern: Bridging Tools and State
+
+The callback bridges the gap between tool execution and state persistence. Here's the basic structure:
+
+```python
+from google.adk.tools import BaseTool, ToolContext
+from typing import Any, Dict, Optional
+
+async def after_search_enrich_callback(
+    tool: BaseTool,
+    args: Dict[str, Any],
+    tool_context: ToolContext,
+    tool_response: Dict
+) -> Optional[Dict]:
+    """
+    After-tool callback that enriches search results and updates state.
+    """
+
+    # Only trigger for specific tool
+    if tool.name != "search_documents":
+        return None
+
+    # Get search results from state
+    search_results = tool_context.state.get('search_results')
+    if not search_results or len(search_results) == 0:
+        return None
+
+    # Check if already enriched (deduplication)
+    search_id = tool_context.state.get('search_id')
+    enriched_search_id = tool_context.state.get('enriched_search_id')
+
+    if search_id and search_id == enriched_search_id:
+        # Already enriched, skip
+        return None
+
+    # Run enrichment and update state progressively
+    await _enrich_and_update_state(tool_context, search_results, search_id)
+
+    # Return None to keep original tool result unchanged
+    return None
+```
+
+**Key architectural decisions:**
+
+1. **Tool-specific triggering**: Check `tool.name` to avoid running on every tool execution. If an agent has 10 tools but only one needs enrichment, this prevents wasted computing.
+
+2. **Deduplication**: Track `search_id` vs `enriched_search_id`. ADK sessions can replay (on errors or reconnections), so avoiding re-enriching the same results multiple times is critical in production.
+
+3. **Graceful errors**: If enrichment fails, we want to preserve the base search results. Users should still see something useful, not a blank screen.
+
+4. **Return `None`**: We're not modifying the tool's output to the LLM—we're just updating session state for future use. Returning `None` keeps the original tool result intact.
+
+## Progressive State Updates
+
+The real magic happens in `_enrich_and_update_state`. This is where we enrich data progressively and update the agent's state as each item completes:
+
+```python
+async def _enrich_and_update_state(
+    tool_context: ToolContext,
+    documents: List[Dict],
+    search_id: str
+):
+    """
+    Background enrichment with progressive state updates.
+    """
+    try:
+        # Import enrichment service 
+        from .enrichment import get_enrichment_service
+        enricher = get_enrichment_service()
+
+        # Track progress
+        completed_count = 0
+        success_count = 0
+        enriched_docs = list(documents)  # Mutable copy
+
+        # Define progress callback
+        async def progress_callback(enriched_doc: dict, index: int, total: int):
+            nonlocal completed_count, success_count
+
+            # Update the document in the list
+            enriched_docs[index] = enriched_doc
+            completed_count += 1
+
+            if enriched_doc.get('enrichment_success'):
+                success_count += 1
+
+            # Update state progressively (this is the key!)
+            tool_context.state.update({
+                'search_results': enriched_docs,
+                'enrichment_in_progress': True,
+                'enrichment_progress': {
+                    'completed': completed_count,
+                    'total': total,
+                    'successful': success_count
+                }
+            })
+
+        # Enrich with progressive updates
+        enriched_docs = await enricher.enrich_documents(
+            documents,
+            max_concurrent=10,
+            timeout_per_doc=15,
+        )
+
+        # Filter out failed enrichments
+        active_docs = [
+            d for d in enriched_docs
+            if d.get('enrichment_success', False)
+        ]
+
+        # Final state update
+        tool_context.state.update({
+            'search_results': active_docs,
+            'enrichment_completed': True,
+            'enrichment_in_progress': False,
+            'enriched_search_id': search_id,  # Mark as enriched
+            'enrichment_success_rate': success_count / len(enriched_docs) if enriched_docs else 0,
+            'total_before_filtering': len(enriched_docs),
+            'total_after_filtering': len(active_docs)
+        })
+
+    except Exception as e:
+        # Preserve base results even if enrichment fails
+        tool_context.state.update({
+            'enrichment_completed': False,
+            'enrichment_in_progress': False,
+            'enrichment_error': str(e)
+        })
+```
+
+**Why this matters:**
+
+- **Agent has enriched data**: When the user asks "show me documents with code examples," the agent already has content summaries, extracted code blocks, and metadata cached in state.
+- **State persisted in ADK session**: All this data is automatically saved to ADK's session storage. The agent can reference it across multiple conversation turns.
+
+## The Response Delay Constraint
+
+ADK currently doesn't support streaming partial results mid-execution. The callback must complete before the agent can respond to the user. This means:
+
+```python
+# Wait for enrichment to complete
+await _enrich_and_update_state(...)
+return None
+```
+
+**The trade-off:** For document enrichment taking 10-20 seconds, there will be a delay before the agent responds. However, users get complete, rich results immediately and can start asking follow-up questions right away without waiting for background jobs to finish. The UX is predictable and complete rather than fast but incomplete.
+
+## Callback vs Custom Endpoints: Choosing the Right Tool
+
+Last week's post covered custom FastAPI endpoints with Server-Sent Events for progressive frontend updates. How does that compare to callbacks?
+
+| Approach | Use Case | Pros | Cons |
+|----------|----------|------|------|
+| **Callbacks** | Agent state persistence | No HTTP overhead, session-native, simple | Limited frontend visibility during enrichment |
+| **Custom Endpoints** | Frontend progressive loading | Real-time UI updates, SSE streaming, great UX | More complex architecture, separate infrastructure |
+| **Both** | Production systems | Best of both worlds | More code and complexity |
+
+**Recommended pattern for production:**
+
+1. Use **callback** to update agent state for follow-up Q&A
+2. Use **custom endpoint** to stream progress to the frontend via SSE
+3. Callback ensures agent has data; endpoint ensures users see progress
+
+They complement each other. The callback makes the agent smarter; the endpoint makes the UI responsive. One can be implemented without the other, but together they provide the best experience.
+
+## Future: Native Progressive Tools (PR #2698)
+
+While researching this post, I found [PR #2698](https://github.com/google/adk-python/pull/2698) which introduces native support for progressive tool execution. It's not merged yet, but it's worth watching.
+
+**What's coming:**
+
+- `ProgressiveFunctionTool` and `ProgressiveTool` abstractions
+- Async generators where each `yield` represents partial progress
+- Native streaming of partial results to users via ADK's flow processing layer
+
+**Future refactor concept:**
+
+```python
+from google.adk.tools import ProgressiveTool
+
+class EnrichmentTool(ProgressiveTool):
+    async def execute(self, documents, progress_callback):
+        for doc in documents:
+            enriched = await enrich_one(doc)
+
+            # Native ADK progress callback
+            await progress_callback(enriched)
+
+            # Yield partial result (streamed to user)
+            yield enriched
+```
+
+This means ADK would handle progress callback natively. The intermediate results would stream to users automatically, while the final result goes to the LLM.
+
+**Status:** Under review, not yet available. For now, the callback pattern I've described is limited in visibility.
+
+## TL;DR: Key Takeaways
+
+`after_tool_callback` bridges async enrichment operations with ADK's session state management. By calling `tool_context.state.update()` directly, HTTP overhead is eliminated. Agents have complete, enriched data for follow-up conversations.
+
+**Key insights:**
+
+- Use callbacks for agent state persistence, not frontend updates
+- Deduplication prevents wasted work on session replays
+
+**When to use this pattern:**
+
+- Post-processing tool results with expensive operations (content extraction, image analysis, etc.)
+- Caching enriched data in agent state for future Q&A
+- Ensuring agents have complete information without re-fetching
+- But *not* for real-time frontend updates (use SSE endpoints for that)
+
+This pattern transformed my enrichment workflow to a simple, reliable callback that just works. Highly recommended for production ADK agents.
+
+---
+
+*This is part 6 of my series on building production AI agents with Google ADK and AWS. Check out the other posts:*
+
+1. *[Simplifying Multi-Agent Systems: Reducing Root Agent Complexity](./simplifying-multi-agent-systems)*
+2. *[Deploying Google ADK Agents to AWS: Integrating with Existing Infrastructure](./deploy-adk-aws)*
+3. *[Implementing Retry Strategies in Google ADK: Handling 429 Errors Gracefully](./implementing-retry-strategies-google-adk)*
+4. *[Building Custom Frontends for ADK Agents: Real-Time Streaming and State Management](./building-adk-frontends)*
+5. *[Building Progressive Data Loading with Google ADK: Adding Custom FastAPI Endpoints](./progressive-data-loading-adk)*

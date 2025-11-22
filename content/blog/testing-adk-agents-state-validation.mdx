@@ -1,0 +1,351 @@
+---
+title: "Testing ADK Agents with State Validation: An Alternative to Full Session Replay"
+description: "Write focused unit tests that verify agent behavior through state inspection, rather than replaying full conversation histories."
+date: "2025-11-22"
+tags: ["Google ADK", "testing", "agent state", "unit test", "pytest"]
+draft: false
+---
+
+# Testing ADK Agents with State Validation: An Alternative to Full Session Replay
+
+Google's ADK provides `adk eval` for agent testing. A full conversation session can be saved via the web UI, exported as an evalset.json file, then replayed to verify the agent produces expected responses. It's great for regression testing, but it's heavyweight for active development.
+
+This week I'm trying a different approach: **state-based unit testing** that verifies specific agent behaviors by inspecting session state after targeted interactions. While `adk eval` tests conversation flows, state validation tests implementation correctness. They complement each other rather than compete.
+
+## The Scenario: Testing Agent Decision Logic
+
+Consider an agent that handles file uploads and searches. The agent should:
+
+1. Save uploaded files before searching
+2. Convert PDFs to images for visual search if appropriate
+3. Trigger fallback search when initial results are insufficient
+
+These are testable behaviors. While `adk eval` with conversation evalsets works well for end-to-end flows, a more programmatic approach can be useful during active development: write targeted tests that send specific messages, wait for processing, then inspect the session state to verify the agent made correct decisions.
+
+## What is State-Based Testing?
+
+State-based testing treats the agent as a stateful system. Instead of verifying every response text matches expected output, the test verifies the agent updated its internal state correctly.
+
+Here's the pattern:
+
+```python
+import asyncio
+import aiohttp
+
+async def test_agent_behavior():
+    # 1. Create session
+    session_id = await create_session()
+
+    # 2. Send targeted message
+    await send_message(session_id, "specific test input")
+
+    # 3. Wait for processing
+    await asyncio.sleep(2)
+
+    # 4. Inspect state
+    state = await get_session_state(session_id)
+
+    # 5. Assert on state properties
+    assert state['expected_flag'] == True
+    assert 'expected_data' in state
+```
+
+No full conversation history needed. No brittle text matching. Just verify the agent's internal state reflects correct decision-making.
+
+## Test 1: File Upload Processing Order
+
+The first test verifies that when a user uploads a PDF with a search query, the agent saves the file before searching. This prevents the search from running without the data.
+
+Here's the test structure:
+
+```python
+async def test_pdf_processing_before_search():
+    """
+    Test that uploading a file forces the agent to process it
+    before attempting a search.
+    """
+
+    base_url = "http://localhost:8000"
+    app_name = "my_agent"
+    user_id = "test_user"
+
+    # Create session
+    async with aiohttp.ClientSession() as session:
+        url = f"{base_url}/apps/{app_name}/users/{user_id}/sessions"
+        async with session.post(url) as response:
+            result = await response.json()
+            session_id = result.get('session_id')
+
+    # Send message with file attachment
+    run_payload = {
+        "appName": app_name,
+        "userId": user_id,
+        "sessionId": session_id,
+        "newMessage": {
+            "parts": [
+                {"text": "Find me this product"},
+                {
+                    "inline_data": {
+                        "mime_type": "application/pdf",
+                        "data": base64_encoded_pdf
+                    }
+                }
+            ],
+            "role": "user"
+        }
+    }
+
+    async with session.post(f"{base_url}/run", json=run_payload) as response:
+        await response.json()
+
+    # Inspect state
+    async with session.get(f"{base_url}/apps/{app_name}/users/{user_id}/sessions/{session_id}") as response:
+        history = await response.json()
+        state = history.get('state', {})
+
+    # Verify processing order via state
+    assert 'artifacts' in state, "File not saved"
+    assert 'search_results' in state, "Search not triggered"
+
+    # Check conversion happened
+    artifacts = state.get('artifacts', [])
+    image_artifacts = [a for a in artifacts if a.get('type') == 'image']
+    assert len(image_artifacts) > 0, "PDF not converted to images"
+```
+
+**Key architectural decisions:**
+
+1. **Inline file upload**: Using ADK's `inline_data` format eliminates the need for multipart form data or external file storage. The file is embedded directly in the message.
+
+2. **State inspection**: Instead of checking if the response says "I've converted your PDF," we verify `artifacts` exist and contain images. This is conversation and turn agnostic.
+
+3. **Async sleep for processing time**: ADK agents run asynchronously. The test waits 2-5 seconds to ensure tools execute before inspecting state. 
+
+4. **Tool execution verification**: Tool calls aren't directly visible in ADK's session API, but the test can verify that required tools were executed by checking for their state artifacts. The presence of both `artifacts` and `search_results` confirms the agent called both tools.
+
+## Test 2: Cascading Search Fallback
+
+The second test verifies automatic fallback behavior. When an initial search returns insufficient results (< 10 items), the agent should automatically trigger a broader search without user intervention.
+
+Here's the test pattern:
+
+```python
+async def test_search_cascade():
+    """
+    Test that insufficient search results trigger automatic fallback
+    to a broader search source.
+    """
+
+    # Create session and send initial query 
+    session_id = await create_session()
+    await send_message(session_id, "I need product x")
+
+    # Agent triggers search with minimal data
+    await asyncio.sleep(2)
+
+    # Inspect state
+    state = await get_session_state(session_id)
+
+    # Verify cascade flags
+    assert state.get('initial_search_exhausted') == True
+    assert state.get('fallback_triggered') == True
+
+    # Verify search source changed
+    search_source = state.get('search_source', '')
+    assert 'fallback' in search_source.lower(), \
+        f"Expected fallback source, got: {search_source}"
+
+    # Verify results were merged
+    results = state.get('search_results', [])
+    assert len(results) > 10, "No results after cascade"
+```
+
+**Why this matters:**
+
+- **No conversation history needed**: The test doesn't verify what the agent said in response. It only verifies that the agent set `initial_search_exhausted=True` and changed `search_source`.
+- **Tests decision logic, not text**: Refactoring prompts or changing response formatting won't break this test as long as the state transitions remain correct.
+- **Fast iteration**: No need to open `adk web`, conduct a conversation, save to evalset, then run `adk eval`. Simply run `python test_cascade.py`.
+
+## The Core Pattern: Verify State, Not Responses
+
+The insight is that consistent agent behaviour is about the right state transitions, not text output. An agent can say "Sure, I'll search for that!" but never actually search. State-based testing catches that.
+
+Here's the assertion pattern I use:
+
+```python
+# Get state
+state = history.get('state', {})
+
+# A. Verify tools executed (inferred from state artifacts)
+assert 'expected_state_key' in state, "Tool didn't execute"
+
+# B. Verify flags set correctly
+assert state.get('decision_flag') == True, "Decision logic failed"
+
+# C. Verify data transformations
+data = state.get('processed_data', [])
+assert len(data) > 0, "No data produced"
+assert data[0].get('required_field'), "Data missing required field"
+```
+
+## State-Based vs ADK Eval vs Tracing: Choosing the Right Tool
+
+ADK provides multiple approaches for verifying agent behavior. How do they compare?
+
+| Approach | Use Case | Pros | Cons |
+|----------|----------|------|------|
+| **State-based testing** | Unit testing during development | Fast, robust to prompt changes, tests logic, automatable | Limited conversation flow coverage, no execution trace visibility |
+| **ADK eval** | Regression testing, end-to-end flows | Full conversation replay, UI for creating tests | Can be slow for iteration |
+| **ADK web tracing** | Interactive debugging, exploration | Full execution visibility (tool calls, reasoning, state), real-time inspection | Manual only, not automatable |
+| **All three** | Production systems | Comprehensive coverage | More tooling to maintain |
+
+**Key differences:**
+
+- **State-based testing** verifies *outcomes* (final state values) programmatically
+- **ADK eval** verifies *conversation quality* (response text matching) through replay
+- **ADK web tracing** provides *execution visibility* (tool calls, reasoning flow) for debugging
+
+**Recommended pattern for production:**
+
+1. Use **state-based tests** for rapid development and logic validation (automated CI/CD)
+2. Use **ADK eval** for critical user flows and regression testing
+3. Use **ADK web tracing** for interactive debugging when tests fail or behavior is unexpected
+
+They complement each other. State tests catch broken logic immediately; eval tests catch broken user experiences over time; tracing helps diagnose why failures occurred.
+
+In my workflow, I write 10-15 state-based tests, covering edge cases and decision paths. Then I save 2-3 full conversation sessions to evalsets for the happy path and critical error scenarios. The state tests usually run much faster than the full eval tests, making them suitable for automated CI/CD.
+
+## Debug-Friendly Output
+
+One advantage of writing tests as Python scripts (rather than JSON evalsets) is you can add rich debug output:
+
+```python
+# Print state keys for debugging
+print(f"📋 Session State Keys: {list(state.keys())}")
+
+# Print detailed cascade information
+print("📊 CASCADE VERIFICATION")
+print(f"   - Initial results count: {initial_count}")
+print(f"   - Exhausted flag: {state.get('exhausted')}")
+print(f"   - Fallback triggered: {state.get('fallback_triggered')}")
+print(f"   - Search source: {state.get('search_source')}")
+
+# Conditional debug output
+if not test_passed:
+    print("❌ TEST FAILED - Issues found:\n")
+    for i, error in enumerate(errors, 1):
+        print(f"   {i}. {error}")
+```
+
+When tests fail, there is immediate context about what state was expected vs actual. Better than `adk eval` showing too much granular logs but not having enough error details.
+
+## Testing Multi-Turn Flows
+
+State-based testing works great for multi-turn conversations too. The test simply sends messages sequentially and verifies state after each turn:
+
+```python
+async def test_multi_turn_flow():
+    session_id = await create_session()
+
+    # Turn 1: Initial query
+    await send_message(session_id, "I need product X")
+    await asyncio.sleep(2)
+
+    state = await get_session_state(session_id)
+    assert state.get('query_understood') == True
+
+    # Turn 2: Provide additional context
+    await send_message(session_id, "I need it in blue")
+    await asyncio.sleep(2)
+
+    state = await get_session_state(session_id)
+    assert state.get('color_preference') == 'blue'
+    assert state.get('ready_to_search') == True
+
+    # Turn 3: Trigger search
+    await send_message(session_id, "Search now")
+    await asyncio.sleep(5)
+
+    state = await get_session_state(session_id)
+    assert 'search_results' in state
+    assert len(state['search_results']) > 0
+```
+
+Each turn builds on the previous state. The test can be made to verify the agent's memory and context management, not just individual responses.
+
+## Running the Tests
+
+Since these are just Python scripts with asyncio, they can be run directly:
+
+```bash
+# Start ADK server
+adk web
+
+# In another terminal, run tests
+cd test_evals
+python test_cascade.py
+python test_pdf_flow.py
+
+# Or use pytest for better output
+pytest test_evals/ -v
+```
+
+No special ADK eval commands needed. No JSON evalset files. Just standard Python testing workflows.
+
+## Limitations and When to Use ADK Eval
+
+State-based testing has limitations:
+
+**What it can't test:**
+
+- ❌ Exact response wording (testing this is too brittle anyway)
+- ❌ Response formatting for end users (this is UX, not logic)
+- ❌ Complex conversation branches where state alone doesn't tell the story
+
+**When to use ADK eval instead:**
+
+- ✅ Testing complete user journeys with multiple conversation turns
+- ✅ Verifying response quality for critical flows (customer-facing demos)
+- ✅ Regression testing after major prompt refactors
+- ✅ Testing conversation branching (user says A vs B → different paths)
+
+State-based tests are better for low-level unit testing.
+
+## Best Practices
+
+From my experience building these tests, here's what works:
+
+**Keep tests focused.** Each test should verify one decision path or behavior. When a test fails, it should be immediately obvious what broke.
+
+**Use descriptive state keys.** Instead of generic flags like `done` or `result`, use specific keys like `pdf_converted`, `fallback_triggered`, or `search_exhausted`. This makes assertions self-documenting.
+
+**Add debug output.** Detailed state dumps are invaluable. Print the full state dictionary, flag values, and any intermediate calculations.
+
+**Wait for async operations properly.** Use `asyncio.sleep()` with generous timeouts (2-5 seconds) or poll until expected state keys appear. 
+
+
+## TL;DR: Key Takeaways
+
+State-based testing provides a fast, robust way to verify agent decision logic during active development. By inspecting session state instead of matching response text, tests can be faster and agnostic to prompt changes.
+
+**Key insights:**
+
+- Verify state transitions, not response text
+- Infer tool execution from state artifacts
+- Use asyncio.sleep() or polling to wait for async agent processing
+- Complements ADK eval and ADK web tracing
+- Debug output is more informative with Python scripts (vs JSON evalsets)
+
+**When to use this pattern:**
+
+- ✅ Unit testing agent decision logic
+- ✅ Verifying tool execution and data transformations
+- ✅ Testing edge cases and error paths
+- ✅ Rapid iteration during development
+- ❌ Not for end-to-end conversation quality testing (use ADK eval)
+
+This pattern transformed my testing workflow from saving sessions in the UI and running full eval replays to writing focused tests that run in seconds and catch logic bugs immediately. Highly recommended for production ADK agents.
+
+---
+
+*This is part 7 of my series on building production AI agents with Google ADK and AWS. Check out the other posts with the `Google ADK` tags.*
